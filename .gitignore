@@ -1,0 +1,41 @@
+# Gradle files
+.gradle/
+build/
+/*/build/
+
+# Local configuration
+local.properties
+.idea/caches/
+.idea/libraries/
+.idea/modules.xml
+.idea/workspace.xml
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+.idea/deploymentTargetDropDown.xml
+.idea/modules/
+
+# IDE files
+*.iml
+.idea/
+
+# Signing files
+*.jks
+*.keystore
+*.p12
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Built artifacts
+*.apk
+*.aar
+*.bundle
+
+# Logs
+log/
+*.log
+
+# Sensitive Data Fallback
+secrets.properties
+google-services.json

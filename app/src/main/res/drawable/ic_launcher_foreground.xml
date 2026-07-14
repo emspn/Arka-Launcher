@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Hub -->
+    <path
+        android:fillColor="@color/arka_copper"
+        android:pathData="M 54 46 A 8 8 0 1 1 54 62 A 8 8 0 1 1 54 46" />
+    <!-- Spokes -->
+    <path
+        android:strokeColor="@color/arka_copper"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M 54 54 L 54 24
+                          M 54 54 L 75.2 32.8
+                          M 54 54 L 84 54
+                          M 54 54 L 75.2 75.2
+                          M 54 54 L 54 84
+                          M 54 54 L 32.8 75.2
+                          M 54 54 L 24 54
+                          M 54 54 L 32.8 32.8" />
+</vector>
