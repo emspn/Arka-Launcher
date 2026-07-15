@@ -8,6 +8,15 @@ interface AppDao {
     @Query("SELECT * FROM installed_apps ORDER BY appName ASC")
     fun getAllApps(): Flow<List<InstalledApp>>
 
+    @Query("SELECT * FROM installed_apps")
+    suspend fun getAllAppsSync(): List<InstalledApp>
+
+    @Transaction
+    suspend fun updateAppsTransaction(apps: List<InstalledApp>) {
+        clearAll()
+        insertApps(apps)
+    }
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertApps(apps: List<InstalledApp>)
 

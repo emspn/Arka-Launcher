@@ -73,8 +73,6 @@ fun HomeScreen(
     val apps by viewModel.apps.collectAsState()
     val dockApps by viewModel.dockApps.collectAsState()
     val isPrabhaMode by viewModel.isPrabhaMode.collectAsState()
-    val screenTime by viewModel.screenTime.collectAsState()
-    val focusStreak by viewModel.focusStreak.collectAsState()
     val showDefaultLauncherPrompt by viewModel.showDefaultLauncherPrompt.collectAsState()
 
     val pagerState = rememberPagerState(pageCount = { 2 })
@@ -196,21 +194,7 @@ fun HomeScreen(
                                     ClockDisplay()
                                 }
                             } else {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(horizontal = 24.dp)
-                                        .verticalScroll(rememberScrollState()),
-                                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Spacer(modifier = Modifier.height(20.dp))
-                                    WeatherWidget()
-                                    ClockWidget()
-                                    PrabhaStatsWidget(screenTime = screenTime, focusStreak = focusStreak)
-                                    DailyVerseWidget()
-                                    Spacer(modifier = Modifier.height(20.dp))
-                                }
+                                WidgetPage(viewModel)
                             }
                         }
 
@@ -524,6 +508,28 @@ fun ClockWidget() {
     }
 }
 
+
+@Composable
+fun WidgetPage(viewModel: HomeViewModel) {
+    val screenTime by viewModel.screenTime.collectAsState()
+    val focusStreak by viewModel.focusStreak.collectAsState()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 24.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.height(20.dp))
+        WeatherWidget()
+        ClockWidget()
+        PrabhaStatsWidget(screenTime = screenTime, focusStreak = focusStreak)
+        DailyVerseWidget()
+        Spacer(modifier = Modifier.height(20.dp))
+    }
+}
 
 @Composable
 fun DailyVerseWidget() {

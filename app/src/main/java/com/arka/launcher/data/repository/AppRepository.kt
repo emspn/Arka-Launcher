@@ -30,7 +30,7 @@ class AppRepository @Inject constructor(
                 addCategory(Intent.CATEGORY_LAUNCHER)
             }
             val resolveInfos = pm.queryIntentActivities(intent, 0) ?: emptyList()
-            val apps = resolveInfos.mapNotNull { resolveInfo ->
+            val newApps = resolveInfos.mapNotNull { resolveInfo ->
                 val activityInfo = resolveInfo.activityInfo ?: return@mapNotNull null
                 val appInfo = activityInfo.applicationInfo ?: return@mapNotNull null
                 
@@ -38,10 +38,16 @@ class AppRepository @Inject constructor(
                 val appName = resolveInfo.loadLabel(pm).toString()
                 val isSystemApp = (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
                 InstalledApp(packageName, appName, null, isSystemApp)
+            }.sortedBy { it.packageName }
+
+            val currentApps = appDao.getAllAppsSync().sortedBy { it.packageName }
+            
+            if (newApps != currentApps) {
+                android.util.Log.d("ArkaRepository", "Apps changed, updating DB...")
+                appDao.updateAppsTransaction(newApps)
+            } else {
+                android.util.Log.d("ArkaRepository", "No app changes detected.")
             }
-            android.util.Log.d("ArkaRepository", "Found ${apps.size} apps")
-            appDao.clearAll()
-            appDao.insertApps(apps)
         } finally {
             isRefreshing = false
         }
