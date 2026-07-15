@@ -51,7 +51,9 @@ fun DrawerScreen(viewModel: HomeViewModel) {
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 18.sp
             )
-            TextButton(onClick = { viewModel.setLauncherState(LauncherState.HOME) }) {
+            TextButton(
+                onClick = { viewModel.setLauncherState(LauncherState.HOME) }
+            ) {
                 Text("Close", color = theme.onBackground, fontSize = 11.sp)
             }
         }
@@ -64,7 +66,13 @@ fun DrawerScreen(viewModel: HomeViewModel) {
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp),
             placeholder = { Text("Search Arka", fontSize = 13.sp) },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(14.dp)) },
+            leadingIcon = { 
+                Icon(
+                    imageVector = Icons.Default.Search, 
+                    contentDescription = "Search", 
+                    modifier = Modifier.size(14.dp)
+                ) 
+            },
             colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = theme.surface,
                 unfocusedContainerColor = theme.surface,
@@ -115,7 +123,11 @@ fun DrawerScreen(viewModel: HomeViewModel) {
                             .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        AppIcon(packageName = app.packageName, size = 30.dp)
+                        AppIcon(
+                            packageName = app.packageName, 
+                            size = 30.dp,
+                            contentDescription = "Launch ${app.appName}"
+                        )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
                             text = app.appName,

@@ -10,6 +10,7 @@ import dagger.hilt.android.HiltAndroidApp
 @HiltAndroidApp
 class ArkaApplication : Application(), ImageLoaderFactory {
     override fun newImageLoader(): ImageLoader {
+        android.util.Log.d("ArkaApplication", "Creating custom ImageLoader with AppIconFetcher")
         return ImageLoader.Builder(this)
             .memoryCache {
                 MemoryCache.Builder(this)

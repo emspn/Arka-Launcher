@@ -50,7 +50,11 @@ fun AppContextMenu(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                AppIcon(packageName = app.packageName, size = 34.dp)
+                AppIcon(
+                    packageName = app.packageName, 
+                    size = 34.dp,
+                    contentDescription = "${app.appName} icon"
+                )
                 Text(
                     text = app.appName,
                     color = theme.onSurface,
@@ -87,11 +91,19 @@ fun AppContextMenu(
                 text = "Uninstall",
                 color = theme.tertiary, // Ember
                 onClick = {
+                    android.util.Log.d("ArkaUninstall", "Uninstall clicked for: ${app.packageName}")
                     onDismiss()
-                    val intent = Intent(Intent.ACTION_DELETE).apply {
-                        data = Uri.parse("package:${app.packageName}")
+                    try {
+                        val intent = Intent(Intent.ACTION_DELETE).apply {
+                            data = Uri.parse("package:${app.packageName}")
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        }
+                        android.util.Log.d("ArkaUninstall", "Starting uninstall intent")
+                        context.startActivity(intent)
+                        android.util.Log.d("ArkaUninstall", "Uninstall intent started successfully")
+                    } catch (e: Exception) {
+                        android.util.Log.e("ArkaUninstall", "Error starting uninstall intent", e)
                     }
-                    context.startActivity(intent)
                 }
             )
             

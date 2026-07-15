@@ -36,8 +36,20 @@ class HomeViewModel @Inject constructor(
     private val _selectedAppForMenu = MutableStateFlow<InstalledApp?>(null)
     val selectedAppForMenu: StateFlow<InstalledApp?> = _selectedAppForMenu
 
+    private val _showHomeSettings = MutableStateFlow(false)
+    val showHomeSettings: StateFlow<Boolean> = _showHomeSettings
+
+    private val _showThemePicker = MutableStateFlow(false)
+    val showThemePicker: StateFlow<Boolean> = _showThemePicker
+
     private val _showDefaultLauncherPrompt = MutableStateFlow(false)
     val showDefaultLauncherPrompt: StateFlow<Boolean> = _showDefaultLauncherPrompt
+
+    val themeKey = dockRepository.selectedTheme.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = "sandstone"
+    )
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery
@@ -121,8 +133,36 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    fun reorderDock(newPackages: List<String>) {
+        viewModelScope.launch {
+            dockRepository.reorderDock(newPackages)
+        }
+    }
+
     fun showAppMenu(app: InstalledApp?) {
         _selectedAppForMenu.value = app
+    }
+
+    fun showHomeSettings(show: Boolean) {
+        _showHomeSettings.value = show
+    }
+
+    fun showThemePicker(show: Boolean) {
+        _showThemePicker.value = show
+    }
+
+    fun setTheme(key: String) {
+        viewModelScope.launch {
+            dockRepository.setTheme(key)
+        }
+    }
+
+    fun cycleTheme() {
+        viewModelScope.launch {
+            val current = themeKey.value
+            val nextIndex = (com.arka.launcher.ui.theme.THEME_KEYS.indexOf(current) + 1) % com.arka.launcher.ui.theme.THEME_KEYS.size
+            dockRepository.setTheme(com.arka.launcher.ui.theme.THEME_KEYS[nextIndex])
+        }
     }
 
     fun dismissDefaultLauncherPrompt() {

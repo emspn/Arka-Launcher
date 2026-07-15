@@ -38,6 +38,7 @@ import androidx.compose.material3.Icon
 fun AppIcon(
     packageName: String,
     size: Dp = 46.dp,
+    contentDescription: String? = null,
     onClick: () -> Unit = {},
     onLongClick: () -> Unit = {}
 ) {
@@ -56,6 +57,7 @@ fun AppIcon(
     )
 
     val request = remember(packageName) {
+        android.util.Log.d("AppIcon", "Creating request for: $packageName")
         ImageRequest.Builder(context)
             .data("app-icon://$packageName")
             .crossfade(true)
@@ -100,17 +102,23 @@ fun AppIcon(
         if (!isError) {
             AsyncImage(
                 model = request,
-                contentDescription = null,
+                contentDescription = contentDescription,
                 modifier = Modifier.size(size * 0.6f),
                 contentScale = ContentScale.Fit,
                 onState = { state ->
-                    isError = state is AsyncImagePainter.State.Error
+                    if (state is AsyncImagePainter.State.Error) {
+                        android.util.Log.e("AppIcon", "Error loading icon for $packageName: ${state.result.throwable}")
+                        isError = true
+                    }
+                    if (state is AsyncImagePainter.State.Success) {
+                        android.util.Log.d("AppIcon", "Successfully loaded icon for $packageName")
+                    }
                 }
             )
         } else {
             Icon(
                 imageVector = Icons.Default.Info,
-                contentDescription = null,
+                contentDescription = contentDescription,
                 tint = theme.primary,
                 modifier = Modifier.size(size * 0.5f)
             )

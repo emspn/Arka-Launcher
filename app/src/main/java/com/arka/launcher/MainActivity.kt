@@ -15,6 +15,7 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -22,10 +23,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.arka.launcher.ui.components.AppContextMenu
 import com.arka.launcher.ui.drawer.DrawerScreen
 import com.arka.launcher.ui.home.HomeScreen
+import com.arka.launcher.ui.home.HomeSettingsSheet
 import com.arka.launcher.ui.home.HomeViewModel
 import com.arka.launcher.ui.home.LauncherState
+import com.arka.launcher.ui.home.ThemePickerSheet
 import com.arka.launcher.ui.theme.ArkaTheme
-import com.arka.launcher.ui.theme.Bg0
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -61,11 +63,15 @@ class MainActivity : ComponentActivity() {
         Log.d("ArkaMainActivity", "onCreate called")
         enableEdgeToEdge()
         setContent {
-            ArkaTheme {
-                val viewModel: HomeViewModel = hiltViewModel()
+            val viewModel: HomeViewModel = hiltViewModel()
+            val themeKey by viewModel.themeKey.collectAsState()
+            
+            ArkaTheme(themeKey = themeKey) {
                 val launcherState by viewModel.launcherState.collectAsState()
                 val apps by viewModel.apps.collectAsState()
                 val selectedAppForMenu by viewModel.selectedAppForMenu.collectAsState()
+                val showHomeSettings by viewModel.showHomeSettings.collectAsState()
+                val showThemePicker by viewModel.showThemePicker.collectAsState()
                 val dockPackages by viewModel.dockPackages.collectAsState()
                 
                 Log.d("ArkaMainActivity", "launcherState: $launcherState, apps count: ${apps.size}")
@@ -74,7 +80,7 @@ class MainActivity : ComponentActivity() {
                     viewModel.setLauncherState(LauncherState.HOME)
                 }
 
-                Box(modifier = Modifier.fillMaxSize().background(Bg0)) {
+                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                     AnimatedContent(
                         targetState = launcherState,
                         transitionSpec = {
@@ -106,6 +112,23 @@ class MainActivity : ComponentActivity() {
                             if (isPinned) viewModel.unpinFromDock(app.packageName)
                             else viewModel.pinToDock(app.packageName)
                         }
+                    )
+                }
+
+                if (showHomeSettings) {
+                    HomeSettingsSheet(
+                        onDismiss = { viewModel.showHomeSettings(false) },
+                        onSetDefaultLauncher = { openDefaultLauncherSettings() },
+                        onOpenThemePicker = { viewModel.showThemePicker(true) },
+                        currentThemeKey = themeKey
+                    )
+                }
+
+                if (showThemePicker) {
+                    ThemePickerSheet(
+                        currentThemeKey = themeKey,
+                        onThemeSelect = { viewModel.setTheme(it) },
+                        onDismiss = { viewModel.showThemePicker(false) }
                     )
                 }
             }

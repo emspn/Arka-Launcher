@@ -5,33 +5,63 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.HistoryEdu
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.changedToUp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.arka.launcher.R
+import com.arka.launcher.data.local.InstalledApp
 import com.arka.launcher.ui.components.AppIcon
 import com.arka.launcher.ui.components.ArkaWheel
 import com.arka.launcher.ui.components.PrabhaScene
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 @Composable
@@ -46,6 +76,8 @@ fun HomeScreen(
     val isPrabhaMode by viewModel.isPrabhaMode.collectAsState()
     val showDefaultLauncherPrompt by viewModel.showDefaultLauncherPrompt.collectAsState()
 
+    val pagerState = rememberPagerState(pageCount = { 2 })
+
     if (apps.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize().background(theme.background), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -57,19 +89,31 @@ fun HomeScreen(
         return
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onLongPress = {
+                        viewModel.showHomeSettings(true)
+                    }
+                )
+            }
+    ) {
         KonarkSilhouette(modifier = Modifier.align(Alignment.BottomCenter))
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .systemBarsPadding()
-                .padding(horizontal = 24.dp, vertical = 18.dp),
+                .padding(vertical = 18.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Top Bar
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -80,58 +124,63 @@ fun HomeScreen(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp
                 )
-                IconButton(
-                    onClick = { viewModel.togglePrabhaMode() },
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(if (isPrabhaMode) theme.tertiary else theme.surface)
-                        .border(1.dp, theme.outline, RoundedCornerShape(10.dp))
-                ) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_feather),
-                        contentDescription = "Prabha Mode",
-                        tint = theme.onSurface,
-                        modifier = Modifier.size(15.dp)
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = { viewModel.cycleTheme() },
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(theme.surface)
+                            .border(1.dp, theme.outline, RoundedCornerShape(10.dp))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Palette,
+                            contentDescription = "Cycle Theme",
+                            tint = theme.onSurface,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(
+                        onClick = { viewModel.togglePrabhaMode() },
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isPrabhaMode) theme.tertiary else theme.surface)
+                            .border(1.dp, theme.outline, RoundedCornerShape(10.dp))
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_feather),
+                            contentDescription = "Toggle Prabha Focus Mode",
+                            tint = theme.onSurface,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
                 }
             }
 
             if (showDefaultLauncherPrompt && !isPrabhaMode) {
                 Spacer(modifier = Modifier.height(12.dp))
-                DefaultLauncherBanner(
-                    onSetDefault = onSetDefaultLauncher,
-                    onDismiss = { viewModel.dismissDefaultLauncherPrompt() }
-                )
+                Box(modifier = Modifier.padding(horizontal = 24.dp)) {
+                    DefaultLauncherBanner(
+                        onSetDefault = onSetDefaultLauncher,
+                        onDismiss = { viewModel.dismissDefaultLauncherPrompt() }
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // Main Content Area
+            // Main Content Area (Pager)
             Box(
                 modifier = Modifier.weight(1f),
                 contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    AnimatedContent(
-                        targetState = isPrabhaMode,
-                        transitionSpec = {
-                            fadeIn() togetherWith fadeOut()
-                        },
-                        label = "mode_transition"
-                    ) { prabha ->
-                        if (prabha) {
-                            PrabhaScene()
-                        } else {
-                            ArkaWheel()
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(14.dp))
-                    
-                    ClockDisplay()
-                    
-                    if (isPrabhaMode) {
+                if (isPrabhaMode) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        PrabhaScene()
+                        Spacer(modifier = Modifier.height(14.dp))
+                        ClockDisplay()
                         Text(
                             text = "Prabha Mode — distractions hidden",
                             color = theme.secondary,
@@ -140,16 +189,75 @@ fun HomeScreen(
                             modifier = Modifier.padding(top = 14.dp)
                         )
                     }
+                } else {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        HorizontalPager(
+                            state = pagerState,
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) { page ->
+                            if (page == 0) {
+                                Column(
+                                    modifier = Modifier.fillMaxSize(),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    ArkaWheel()
+                                    Spacer(modifier = Modifier.height(14.dp))
+                                    ClockDisplay()
+                                }
+                            } else {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 24.dp)
+                                        .verticalScroll(rememberScrollState()),
+                                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Spacer(modifier = Modifier.height(20.dp))
+                                    WeatherWidget()
+                                    ClockWidget()
+                                    PrabhaStatsWidget()
+                                    DailyVerseWidget()
+                                    Spacer(modifier = Modifier.height(20.dp))
+                                }
+                            }
+                        }
+
+                        // Page Dots
+                        Row(
+                            Modifier
+                                .height(16.dp)
+                                .fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            repeat(2) { iteration ->
+                                val color = if (pagerState.currentPage == iteration) theme.primary else theme.outline
+                                Box(
+                                    modifier = Modifier
+                                        .padding(2.dp)
+                                        .clip(CircleShape)
+                                        .background(color)
+                                        .size(if (pagerState.currentPage == iteration) 16.dp else 6.dp, 6.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
-            // Bottom UI
+            // Bottom UI (Hidden in Prabha Mode)
             AnimatedVisibility(
                 visible = !isPrabhaMode,
                 enter = fadeIn() + slideInVertically { it },
                 exit = fadeOut() + slideOutVertically { it }
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Search Bar Pill
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -158,7 +266,9 @@ fun HomeScreen(
                             .clip(RoundedCornerShape(16.dp))
                             .background(theme.surface)
                             .border(1.dp, theme.outline, RoundedCornerShape(16.dp))
-                            .clickable { viewModel.setLauncherState(LauncherState.DRAWER) }
+                            .clickable(
+                                onClickLabel = "Open App Drawer"
+                            ) { viewModel.setLauncherState(LauncherState.DRAWER) }
                             .padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -178,37 +288,284 @@ fun HomeScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    Row(
-                        modifier = Modifier
-                            .shadow(elevation = 10.dp, shape = RoundedCornerShape(28.dp))
-                            .clip(RoundedCornerShape(28.dp))
-                            .background(theme.surface)
-                            .border(1.dp, theme.outline, RoundedCornerShape(28.dp))
-                            .padding(horizontal = 20.dp, vertical = 14.dp),
-                        horizontalArrangement = Arrangement.spacedBy(22.dp)
-                    ) {
-                        dockApps.forEach { app ->
-                            AppIcon(
-                                packageName = app.packageName,
-                                onClick = {
-                                    val intent = context.packageManager.getLaunchIntentForPackage(app.packageName)
-                                    if (intent != null) {
-                                        context.startActivity(intent)
-                                    }
-                                },
-                                onLongClick = {
-                                    viewModel.showAppMenu(app)
-                                }
-                            )
-                        }
-                        repeat(4 - dockApps.size) {
-                            Box(modifier = Modifier.size(46.dp).background(theme.outline.copy(alpha = 0.2f), CircleShape))
-                        }
-                    }
+                    // Dock
+                    DraggableDock(
+                        viewModel = viewModel,
+                        dockApps = dockApps
+                    )
                     
                     Spacer(modifier = Modifier.height(10.dp))
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun DraggableDock(
+    viewModel: HomeViewModel,
+    dockApps: List<InstalledApp>
+) {
+    val theme = MaterialTheme.colorScheme
+    val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
+    
+    var list by remember(dockApps) { mutableStateOf(dockApps) }
+    var draggedIndex by remember { mutableStateOf<Int?>(null) }
+    var dragOffset by remember { mutableStateOf(0f) }
+    
+    val itemPositions = remember { mutableStateMapOf<Int, Float>() }
+    val itemWidths = remember { mutableStateMapOf<Int, Float>() }
+
+    Row(
+        modifier = Modifier
+            .shadow(elevation = 10.dp, shape = RoundedCornerShape(28.dp))
+            .clip(RoundedCornerShape(28.dp))
+            .background(theme.surface)
+            .border(1.dp, theme.outline, RoundedCornerShape(28.dp))
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(22.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        list.forEachIndexed { index, app ->
+            val isDragging = draggedIndex == index
+            
+            Box(
+                modifier = Modifier
+                    .onGloballyPositioned { layoutNodes ->
+                        itemWidths[index] = layoutNodes.size.width.toFloat()
+                        itemPositions[index] = layoutNodes.positionInParent().x
+                    }
+                    .zIndex(if (isDragging) 10f else 0f)
+                    .graphicsLayer {
+                        if (isDragging) {
+                            translationX = dragOffset
+                            scaleX = 1.15f
+                            scaleY = 1.15f
+                        }
+                    }
+                    .pointerInput(app.packageName) {
+                        coroutineScope {
+                            awaitPointerEventScope {
+                                val down = awaitFirstDown()
+                                val longPressTimeout = viewConfiguration.longPressTimeoutMillis
+                                val touchSlop = viewConfiguration.touchSlop
+                                var pointer = down
+                                
+                                val longPressResult = withTimeoutOrNull(longPressTimeout) {
+                                    while (true) {
+                                        val event = awaitPointerEvent()
+                                        pointer = event.changes.first()
+                                        if (pointer.changedToUp()) return@withTimeoutOrNull false
+                                        if (pointer.positionChange().getDistance() > touchSlop) return@withTimeoutOrNull false
+                                    }
+                                }
+                                val longPress = longPressResult == null
+                                
+                                if (longPress) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    var dragged = false
+                                    var currentIdx = list.indexOfFirst { it.packageName == app.packageName }
+                                    
+                                    while (true) {
+                                        val event = awaitPointerEvent()
+                                        pointer = event.changes.first()
+                                        
+                                        if (pointer.changedToUp()) {
+                                            if (!dragged) {
+                                                viewModel.showAppMenu(app)
+                                            } else {
+                                                viewModel.reorderDock(list.map { it.packageName })
+                                            }
+                                            draggedIndex = null
+                                            dragOffset = 0f
+                                            break
+                                        }
+                                        
+                                        val dragAmount = pointer.positionChange()
+                                        if (dragAmount.x != 0f) {
+                                            dragged = true
+                                            draggedIndex = currentIdx
+                                            dragOffset += dragAmount.x
+                                            pointer.consume()
+                                            
+                                            val currentX = itemPositions[currentIdx]!! + dragOffset + (itemWidths[currentIdx]!! / 2)
+                                            
+                                            for (i in list.indices) {
+                                                if (i != currentIdx) {
+                                                    val targetCenterX = itemPositions[i]!! + (itemWidths[i]!! / 2)
+                                                    if ((currentIdx < i && currentX > targetCenterX) ||
+                                                        (currentIdx > i && currentX < targetCenterX)) {
+                                                        
+                                                        val newList = list.toMutableList()
+                                                        Collections.swap(newList, currentIdx, i)
+                                                        
+                                                        val oldPos = itemPositions[currentIdx]!!
+                                                        val newPos = itemPositions[i]!!
+                                                        
+                                                        list = newList
+                                                        dragOffset -= (newPos - oldPos)
+                                                        currentIdx = i
+                                                        draggedIndex = i
+                                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                        break
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    if (pointer.changedToUp()) {
+                                        val intent = context.packageManager.getLaunchIntentForPackage(app.packageName)
+                                        if (intent != null) context.startActivity(intent)
+                                    }
+                                }
+                            }
+                        }
+                    }
+            ) {
+                AppIcon(
+                    packageName = app.packageName,
+                    contentDescription = "Launch ${app.appName}",
+                    onClick = { /* Handled by pointerInput */ },
+                    onLongClick = { /* Handled by pointerInput */ }
+                )
+            }
+        }
+        
+        repeat(4 - list.size) {
+            Box(modifier = Modifier.size(46.dp).background(theme.outline.copy(alpha = 0.2f), CircleShape))
+        }
+    }
+}
+
+@Composable
+fun WeatherWidget() {
+    val theme = MaterialTheme.colorScheme
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = theme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, theme.outline),
+        shape = RoundedCornerShape(22.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(18.dp, 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Today", color = theme.onSurfaceVariant, fontSize = 11.sp, letterSpacing = 1.sp)
+                Text("28°C", color = theme.onSurface, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("Clear skies", color = theme.onSurfaceVariant, fontSize = 11.sp)
+            }
+            Icon(
+                imageVector = Icons.Rounded.Cloud,
+                contentDescription = "Weather: Clear skies",
+                tint = theme.secondary,
+                modifier = Modifier.size(30.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun ClockWidget() {
+    val theme = MaterialTheme.colorScheme
+    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    val dateFormat = remember { SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()) }
+    var currentTime by remember { mutableStateOf(Calendar.getInstance()) }
+    
+    LaunchedEffect(Unit) {
+        while (true) {
+            currentTime = Calendar.getInstance()
+            delay(1000)
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = theme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, theme.outline),
+        shape = RoundedCornerShape(22.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp, 20.dp).fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = timeFormat.format(currentTime.time),
+                color = theme.onSurface,
+                fontSize = 30.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = dateFormat.format(currentTime.time).uppercase(),
+                color = theme.onSurfaceVariant,
+                fontSize = 10.sp,
+                letterSpacing = 1.5.sp
+            )
+        }
+    }
+}
+
+@Composable
+fun PrabhaStatsWidget() {
+    val theme = MaterialTheme.colorScheme
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = theme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, theme.outline),
+        shape = RoundedCornerShape(22.dp)
+    ) {
+        Column(modifier = Modifier.padding(18.dp, 20.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Text("Prabha stats", color = theme.onSurfaceVariant, fontSize = 11.sp, letterSpacing = 1.sp)
+                Text("demo data", color = theme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 8.sp)
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            StatRow("Screen time", "2h 14m")
+            StatRow("Notifications", "6")
+            StatRow("Focus streak", "3 days")
+        }
+    }
+}
+
+@Composable
+fun StatRow(label: String, value: String) {
+    val theme = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, color = theme.onSurface, fontSize = 12.sp)
+        Text(value, color = theme.secondary, fontSize = 12.sp)
+    }
+}
+
+@Composable
+fun DailyVerseWidget() {
+    val theme = MaterialTheme.colorScheme
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = theme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, theme.outline),
+        shape = RoundedCornerShape(22.dp)
+    ) {
+        Column(modifier = Modifier.padding(18.dp, 20.dp)) {
+            Text("Daily verse", color = theme.onSurfaceVariant, fontSize = 11.sp, letterSpacing = 1.sp)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "\"The sun never says to the earth, you owe me.\"",
+                color = theme.onSurface,
+                fontSize = 15.sp,
+                fontStyle = FontStyle.Italic,
+                lineHeight = 22.sp
+            )
+            Text("— Rumi", color = theme.onSurfaceVariant, fontSize = 10.sp, modifier = Modifier.padding(top = 8.dp))
         }
     }
 }
@@ -220,16 +577,13 @@ fun DefaultLauncherBanner(
 ) {
     val theme = MaterialTheme.colorScheme
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp),
+        modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = theme.surface),
         border = androidx.compose.foundation.BorderStroke(1.dp, theme.outline),
         shape = RoundedCornerShape(16.dp)
     ) {
         Row(
-            modifier = Modifier
-                .padding(16.dp),
+            modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {

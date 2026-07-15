@@ -4,6 +4,7 @@
     package="com.arka.launcher">
 
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission" />
+    <uses-permission android:name="android.permission.SET_WALLPAPER" />
 
     <application
         android:name="com.arka.launcher.ArkaApplication"
