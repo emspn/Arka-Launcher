@@ -9,8 +9,15 @@ import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp
 class ArkaApplication : Application(), ImageLoaderFactory {
+    override fun onCreate() {
+        super.onCreate()
+        android.util.Log.d("ArkaApplication", "onCreate called")
+        // Explicitly set the Coil singleton to use this factory
+        coil.Coil.setImageLoader(this)
+    }
+
     override fun newImageLoader(): ImageLoader {
-        android.util.Log.d("ArkaApplication", "Creating custom ImageLoader with AppIconFetcher")
+        android.util.Log.d("ArkaApplication", "Creating custom ImageLoader")
         return ImageLoader.Builder(this)
             .memoryCache {
                 MemoryCache.Builder(this)

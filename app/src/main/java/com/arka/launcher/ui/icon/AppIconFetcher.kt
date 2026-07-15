@@ -2,6 +2,9 @@ package com.arka.launcher.ui.icon
 
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
 import android.util.Log
 import coil.ImageLoader
 import coil.decode.DataSource
@@ -16,42 +19,38 @@ class AppIconFetcher(
 ) : Fetcher {
 
     override suspend fun fetch(): FetchResult? {
-        Log.d("AppIconFetcher", "fetch() called for package: $packageName")
+        Log.d("ArkaIcon", "fetch() for $packageName")
         val pm = context.packageManager
         return try {
-            // Use getApplicationInfo + loadIcon for more reliable fetching on some OEMs
-            val appInfo = pm.getApplicationInfo(packageName, PackageManager.GET_META_DATA)
-            val icon = appInfo.loadIcon(pm)
-            Log.d("AppIconFetcher", "Successfully loaded icon for $packageName")
+            val drawable = pm.getApplicationIcon(packageName)
+            
+            val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 192
+            val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 192
+            
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            drawable.setBounds(0, 0, canvas.width, canvas.height)
+            drawable.draw(canvas)
             
             DrawableResult(
-                drawable = icon,
+                drawable = BitmapDrawable(context.resources, bitmap),
                 isSampled = false,
                 dataSource = DataSource.DISK
             )
-        } catch (e: PackageManager.NameNotFoundException) {
-            Log.e("AppIconFetcher", "Package not found: $packageName")
-            null
         } catch (e: Exception) {
-            Log.e("AppIconFetcher", "Error fetching icon for $packageName", e)
+            Log.e("ArkaIcon", "Failed fetching $packageName", e)
             null
         }
     }
 
-    class Factory(private val context: Context) : Fetcher.Factory<String> {
-        override fun create(data: String, options: Options, imageLoader: ImageLoader): Fetcher? {
-            Log.d("AppIconFetcher", "Factory.create called with data: $data")
-            if (!data.startsWith("app-icon://")) {
-                Log.d("AppIconFetcher", "Data does not start with app-icon://, ignoring")
-                return null
+    class Factory(private val context: Context) : Fetcher.Factory<Any> {
+        override fun create(data: Any, options: Options, imageLoader: ImageLoader): Fetcher? {
+            val packageName = when (data) {
+                is AppIconData -> data.packageName
+                is String -> if (data.startsWith("app-icon://")) data.substringAfter("app-icon://") else null
+                else -> null
             }
-            val packageName = data.substringAfter("app-icon://")
-            if (packageName.isBlank()) {
-                Log.w("AppIconFetcher", "Package name is blank for data: $data")
-                return null
-            }
-            Log.d("AppIconFetcher", "Creating AppIconFetcher for $packageName")
-            return AppIconFetcher(packageName, context)
+            return if (packageName != null) AppIconFetcher(packageName, context) else null
         }
     }
 }

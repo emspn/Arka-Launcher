@@ -1,6 +1,7 @@
 package com.arka.launcher.data.repository
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -24,7 +25,10 @@ class DockRepository @Inject constructor(
     val dockPackages: Flow<List<String>> = context.dataStore.data
         .map { preferences ->
             val packagesString = preferences[dockKey] ?: ""
-            if (packagesString.isEmpty()) emptyList() else packagesString.split(",")
+            Log.d("ArkaDock", "Raw dock string: '$packagesString'")
+            packagesString.split(",")
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
         }
 
     val selectedTheme: Flow<String> = context.dataStore.data
@@ -39,33 +43,44 @@ class DockRepository @Inject constructor(
     }
 
     suspend fun pinApp(packageName: String) {
+        val target = packageName.trim()
+        Log.d("ArkaDock", "Pinning: $target")
         context.dataStore.edit { preferences ->
             val currentString = preferences[dockKey] ?: ""
-            val currentList = if (currentString.isEmpty()) emptyList() else currentString.split(",")
+            val currentList = currentString.split(",")
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && !it.equals(target, ignoreCase = true) }
+                .toMutableList()
             
-            // Remove if already exists to move to end/newest
-            val newList = currentList.filter { it != packageName }.toMutableList()
-            newList.add(packageName)
+            currentList.add(target)
             
-            // Keep only last 4
-            val finalList = if (newList.size > 4) newList.takeLast(4) else newList
-            
-            preferences[dockKey] = finalList.joinToString(",")
+            val finalList = if (currentList.size > 4) currentList.takeLast(4) else currentList
+            val newString = finalList.joinToString(",")
+            preferences[dockKey] = newString
+            Log.d("ArkaDock", "Saved string: '$newString'")
         }
     }
 
     suspend fun unpinApp(packageName: String) {
+        val target = packageName.trim()
+        Log.d("ArkaDock", "Unpinning: $target")
         context.dataStore.edit { preferences ->
             val currentString = preferences[dockKey] ?: ""
-            val currentList = if (currentString.isEmpty()) emptyList() else currentString.split(",")
-            val newList = currentList.filter { it != packageName }
-            preferences[dockKey] = newList.joinToString(",")
+            val newList = currentString.split(",")
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && !it.equals(target, ignoreCase = true) }
+            
+            val newString = newList.joinToString(",")
+            preferences[dockKey] = newString
+            Log.d("ArkaDock", "Saved string after unpin: '$newString'")
         }
     }
 
     suspend fun reorderDock(newPackages: List<String>) {
+        val newString = newPackages.map { it.trim() }.filter { it.isNotEmpty() }.joinToString(",")
+        Log.d("ArkaDock", "Reordering to: $newString")
         context.dataStore.edit { preferences ->
-            preferences[dockKey] = newPackages.joinToString(",")
+            preferences[dockKey] = newString
         }
     }
 }

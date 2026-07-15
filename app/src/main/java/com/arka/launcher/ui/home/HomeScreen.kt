@@ -1,16 +1,17 @@
 package com.arka.launcher.ui.home
 
+import android.content.Intent
+import android.util.Log
 import androidx.compose.animation.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -18,25 +19,21 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.rounded.Cloud
-import androidx.compose.material.icons.rounded.HistoryEdu
 import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -47,7 +44,6 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -61,7 +57,6 @@ import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.cos
-import kotlin.math.roundToInt
 import kotlin.math.sin
 
 @Composable
@@ -70,7 +65,6 @@ fun HomeScreen(
     onSetDefaultLauncher: () -> Unit
 ) {
     val theme = MaterialTheme.colorScheme
-    val context = LocalContext.current
     val apps by viewModel.apps.collectAsState()
     val dockApps by viewModel.dockApps.collectAsState()
     val isPrabhaMode by viewModel.isPrabhaMode.collectAsState()
@@ -93,11 +87,19 @@ fun HomeScreen(
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(Unit) {
+                // Background long press for settings - ONLY trigger if not consumed by children
                 detectTapGestures(
                     onLongPress = {
                         viewModel.showHomeSettings(true)
                     }
                 )
+            }
+            .pointerInput(Unit) {
+                detectVerticalDragGestures { _, dragAmount ->
+                    if (dragAmount < -20f) { // Swipe up
+                        viewModel.setLauncherState(LauncherState.DRAWER)
+                    }
+                }
             }
     ) {
         KonarkSilhouette(modifier = Modifier.align(Alignment.BottomCenter))
@@ -247,9 +249,9 @@ fun HomeScreen(
                 }
             }
 
-            // Bottom UI (Hidden in Prabha Mode)
+            // Bottom UI (Hidden in Prabha Mode and on Widget Page)
             AnimatedVisibility(
-                visible = !isPrabhaMode,
+                visible = !isPrabhaMode && pagerState.currentPage == 0,
                 enter = fadeIn() + slideInVertically { it },
                 exit = fadeOut() + slideOutVertically { it }
             ) {
@@ -307,15 +309,16 @@ fun DraggableDock(
     dockApps: List<InstalledApp>
 ) {
     val theme = MaterialTheme.colorScheme
-    val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+    val density = LocalDensity.current
     
-    var list by remember(dockApps) { mutableStateOf(dockApps) }
-    var draggedIndex by remember { mutableStateOf<Int?>(null) }
-    var dragOffset by remember { mutableStateOf(0f) }
+    // We use the actual dockApps from the ViewModel to ensure it stays in sync
+    var currentList by remember(dockApps) { mutableStateOf(dockApps) }
+    var draggedPkg by remember { mutableStateOf<String?>(null) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
     
-    val itemPositions = remember { mutableStateMapOf<Int, Float>() }
-    val itemWidths = remember { mutableStateMapOf<Int, Float>() }
+    val itemPositions = remember { mutableStateMapOf<String, Float>() }
 
     Row(
         modifier = Modifier
@@ -323,118 +326,147 @@ fun DraggableDock(
             .clip(RoundedCornerShape(28.dp))
             .background(theme.surface)
             .border(1.dp, theme.outline, RoundedCornerShape(28.dp))
-            .padding(horizontal = 20.dp, vertical = 14.dp),
+            .padding(horizontal = 20.dp, vertical = 14.dp)
+            .pointerInput(Unit) {
+                // EXCLUDE Background Settings: Consume long presses in dock row to prevent wallpaper menu
+                detectTapGestures(onLongPress = { }) 
+            },
         horizontalArrangement = Arrangement.spacedBy(22.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        list.forEachIndexed { index, app ->
-            val isDragging = draggedIndex == index
-            
-            Box(
-                modifier = Modifier
-                    .onGloballyPositioned { layoutNodes ->
-                        itemWidths[index] = layoutNodes.size.width.toFloat()
-                        itemPositions[index] = layoutNodes.positionInParent().x
-                    }
-                    .zIndex(if (isDragging) 10f else 0f)
-                    .graphicsLayer {
-                        if (isDragging) {
-                            translationX = dragOffset
-                            scaleX = 1.15f
-                            scaleY = 1.15f
-                        }
-                    }
-                    .pointerInput(app.packageName) {
-                        coroutineScope {
-                            awaitPointerEventScope {
-                                val down = awaitFirstDown()
-                                val longPressTimeout = viewConfiguration.longPressTimeoutMillis
-                                val touchSlop = viewConfiguration.touchSlop
-                                var pointer = down
-                                
-                                val longPressResult = withTimeoutOrNull(longPressTimeout) {
-                                    while (true) {
-                                        val event = awaitPointerEvent()
-                                        pointer = event.changes.first()
-                                        if (pointer.changedToUp()) return@withTimeoutOrNull false
-                                        if (pointer.positionChange().getDistance() > touchSlop) return@withTimeoutOrNull false
-                                    }
+        for (i in 0 until 4) {
+            val app = currentList.getOrNull(i)
+            if (app != null) {
+                key(app.packageName) {
+                    val isDragging = draggedPkg == app.packageName
+                    Box(
+                        modifier = Modifier
+                            .onGloballyPositioned { layout ->
+                                itemPositions[app.packageName] = layout.positionInParent().x
+                            }
+                            .zIndex(if (isDragging) 10f else 1f)
+                            .graphicsLayer {
+                                if (isDragging) {
+                                    translationX = dragOffset
+                                    scaleX = 1.25f
+                                    scaleY = 1.25f
                                 }
-                                val longPress = longPressResult == null
-                                
-                                if (longPress) {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    var dragged = false
-                                    var currentIdx = list.indexOfFirst { it.packageName == app.packageName }
+                            }
+                            .pointerInput(app.packageName) {
+                                awaitEachGesture {
+                                    val down = awaitFirstDown()
+                                    val timeout = viewConfiguration.longPressTimeoutMillis
+                                    val slop = viewConfiguration.touchSlop
                                     
-                                    while (true) {
-                                        val event = awaitPointerEvent()
-                                        pointer = event.changes.first()
-                                        
-                                        if (pointer.changedToUp()) {
-                                            if (!dragged) {
-                                                viewModel.showAppMenu(app)
-                                            } else {
-                                                viewModel.reorderDock(list.map { it.packageName })
+                                    var isLongPress = false
+                                    var movedSignificantly = false
+                                    
+                                    try {
+                                        withTimeout(timeout) {
+                                            while (true) {
+                                                val event = awaitPointerEvent()
+                                                val change = event.changes.first()
+                                                if (change.pressed.not()) {
+                                                    // RELEASE before timeout = TAP
+                                                    Log.d("ArkaDock", "Open: ${app.packageName}")
+                                                    val intent = context.packageManager.getLaunchIntentForPackage(app.packageName)
+                                                    intent?.let {
+                                                        it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                        context.startActivity(it)
+                                                    }
+                                                    change.consume()
+                                                    return@withTimeout
+                                                }
+                                                if ((change.position - down.position).getDistance() > slop) {
+                                                    return@withTimeout // Cancel if moved too much early
+                                                }
                                             }
-                                            draggedIndex = null
-                                            dragOffset = 0f
-                                            break
                                         }
+                                    } catch (e: Exception) {
+                                        isLongPress = true
+                                    }
+
+                                    if (isLongPress) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        // DO NOT show menu here. Wait for release.
                                         
-                                        val dragAmount = pointer.positionChange()
-                                        if (dragAmount.x != 0f) {
-                                            dragged = true
-                                            draggedIndex = currentIdx
-                                            dragOffset += dragAmount.x
-                                            pointer.consume()
+                                        while (true) {
+                                            val event = awaitPointerEvent()
+                                            val change = event.changes.first()
                                             
-                                            val currentX = itemPositions[currentIdx]!! + dragOffset + (itemWidths[currentIdx]!! / 2)
-                                            
-                                            for (i in list.indices) {
-                                                if (i != currentIdx) {
-                                                    val targetCenterX = itemPositions[i]!! + (itemWidths[i]!! / 2)
-                                                    if ((currentIdx < i && currentX > targetCenterX) ||
-                                                        (currentIdx > i && currentX < targetCenterX)) {
+                                            if (change.pressed.not()) {
+                                                if (!movedSignificantly) {
+                                                    // LONG PRESS RELEASED WITHOUT DRAG -> SHOW MENU
+                                                    viewModel.showAppMenu(app)
+                                                } else {
+                                                    // DRAG RELEASED -> COMMIT NEW ORDER
+                                                    viewModel.reorderDock(currentList.map { it.packageName })
+                                                }
+                                                draggedPkg = null
+                                                dragOffset = 0f
+                                                change.consume()
+                                                break
+                                            }
+
+                                            val xDelta = change.positionChange().x
+                                            if (xDelta != 0f) {
+                                                movedSignificantly = true
+                                                draggedPkg = app.packageName
+                                                dragOffset += xDelta
+                                                change.consume()
+                                                
+                                                val currentIdx = currentList.indexOfFirst { it.packageName == app.packageName }
+                                                val iconWidthPx = with(density) { 46.dp.toPx() }
+                                                val currentX = (itemPositions[app.packageName] ?: 0f) + dragOffset + (iconWidthPx / 2)
+                                                
+                                                for (idx in currentList.indices) {
+                                                    if (idx != currentIdx) {
+                                                        val otherPkg = currentList[idx].packageName
+                                                        val otherCenterX = (itemPositions[otherPkg] ?: 0f) + (iconWidthPx / 2)
                                                         
-                                                        val newList = list.toMutableList()
-                                                        Collections.swap(newList, currentIdx, i)
-                                                        
-                                                        val oldPos = itemPositions[currentIdx]!!
-                                                        val newPos = itemPositions[i]!!
-                                                        
-                                                        list = newList
-                                                        dragOffset -= (newPos - oldPos)
-                                                        currentIdx = i
-                                                        draggedIndex = i
-                                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                        break
+                                                        if ((currentIdx < idx && currentX > otherCenterX) || 
+                                                            (currentIdx > idx && currentX < otherCenterX)) {
+                                                            
+                                                            val newList = currentList.toMutableList()
+                                                            Collections.swap(newList, currentIdx, idx)
+                                                            currentList = newList
+                                                            
+                                                            val oldPos = itemPositions[app.packageName] ?: 0f
+                                                            val newPos = itemPositions[otherPkg] ?: 0f
+                                                            dragOffset -= (newPos - oldPos)
+                                                            
+                                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                            break
+                                                        }
                                                     }
                                                 }
                                             }
                                         }
                                     }
-                                } else {
-                                    if (pointer.changedToUp()) {
-                                        val intent = context.packageManager.getLaunchIntentForPackage(app.packageName)
-                                        if (intent != null) context.startActivity(intent)
-                                    }
                                 }
                             }
-                        }
+                    ) {
+                        AppIcon(packageName = app.packageName)
                     }
-            ) {
-                AppIcon(
-                    packageName = app.packageName,
-                    contentDescription = "Launch ${app.appName}",
-                    onClick = { /* Handled by pointerInput */ },
-                    onLongClick = { /* Handled by pointerInput */ }
-                )
+                }
+            } else {
+                // Empty slot with Plus Icon
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .background(theme.outline.copy(alpha = 0.15f))
+                        .clickable { viewModel.setLauncherState(LauncherState.DRAWER) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Add App",
+                        tint = theme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
-        }
-        
-        repeat(4 - list.size) {
-            Box(modifier = Modifier.size(46.dp).background(theme.outline.copy(alpha = 0.2f), CircleShape))
         }
     }
 }

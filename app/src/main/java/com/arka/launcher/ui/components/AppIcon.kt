@@ -24,14 +24,17 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
 import coil.request.ImageRequest
+import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material3.Icon
+import coil.imageLoader
+import com.arka.launcher.ui.icon.AppIconData
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -39,8 +42,9 @@ fun AppIcon(
     packageName: String,
     size: Dp = 46.dp,
     contentDescription: String? = null,
-    onClick: () -> Unit = {},
-    onLongClick: () -> Unit = {}
+    onClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
 ) {
     val theme = MaterialTheme.colorScheme
     val density = LocalDensity.current
@@ -57,17 +61,14 @@ fun AppIcon(
     )
 
     val request = remember(packageName) {
-        android.util.Log.d("AppIcon", "Creating request for: $packageName")
         ImageRequest.Builder(context)
-            .data("app-icon://$packageName")
-            .crossfade(true)
+            .data(AppIconData(packageName))
+            .allowHardware(false)
             .build()
     }
 
-    var isError by remember { mutableStateOf(false) }
-
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(size)
             .graphicsLayer {
                 scaleX = scale
@@ -91,36 +92,40 @@ fun AppIcon(
                 )
             )
             .border(1.dp, theme.outline, CircleShape)
-            .combinedClickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick,
-                onLongClick = onLongClick
+            .then(
+                if (onClick != null || onLongClick != null) {
+                    Modifier.combinedClickable(
+                        interactionSource = interactionSource,
+                        indication = null,
+                        onClick = onClick ?: {},
+                        onLongClick = onLongClick
+                    )
+                } else {
+                    Modifier
+                }
             ),
         contentAlignment = Alignment.Center
     ) {
-        if (!isError) {
-            AsyncImage(
-                model = request,
-                contentDescription = contentDescription,
-                modifier = Modifier.size(size * 0.6f),
-                contentScale = ContentScale.Fit,
-                onState = { state ->
-                    if (state is AsyncImagePainter.State.Error) {
-                        android.util.Log.e("AppIcon", "Error loading icon for $packageName: ${state.result.throwable}")
-                        isError = true
-                    }
-                    if (state is AsyncImagePainter.State.Success) {
-                        android.util.Log.d("AppIcon", "Successfully loaded icon for $packageName")
-                    }
-                }
-            )
-        } else {
+        var isError by remember { mutableStateOf(false) }
+
+        if (isError) {
             Icon(
                 imageVector = Icons.Default.Info,
                 contentDescription = contentDescription,
                 tint = theme.primary,
                 modifier = Modifier.size(size * 0.5f)
+            )
+        } else {
+            AsyncImage(
+                model = request,
+                contentDescription = contentDescription,
+                imageLoader = context.imageLoader,
+                modifier = Modifier.size(size * 0.65f),
+                contentScale = ContentScale.Fit,
+                onError = { state ->
+                    android.util.Log.e("ArkaIcon", "Coil failed for $packageName", state.result.throwable)
+                    isError = true
+                }
             )
         }
     }

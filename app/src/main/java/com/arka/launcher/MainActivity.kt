@@ -103,14 +103,23 @@ class MainActivity : ComponentActivity() {
 
                 if (selectedAppForMenu != null) {
                     val app = selectedAppForMenu!!
-                    val isPinned = dockPackages.contains(app.packageName)
+                    val isPinned = dockPackages.any { it.trim().equals(app.packageName.trim(), ignoreCase = true) }
+                    Log.d("ArkaMainActivity", "OPEN MENU for: [${app.packageName.trim()}]")
+                    Log.d("ArkaMainActivity", "Is Pinned Result: $isPinned")
+                    Log.d("ArkaMainActivity", "Current Dock List: ${dockPackages.map { "[$it]" }}")
+
                     AppContextMenu(
                         app = app,
                         isPinned = isPinned,
                         onDismiss = { viewModel.showAppMenu(null) },
                         onPinToggle = {
-                            if (isPinned) viewModel.unpinFromDock(app.packageName)
-                            else viewModel.pinToDock(app.packageName)
+                            if (isPinned) {
+                                Log.d("ArkaMainActivity", "Removing ${app.packageName}")
+                                viewModel.unpinFromDock(app.packageName)
+                            } else {
+                                Log.d("ArkaMainActivity", "Adding ${app.packageName}")
+                                viewModel.pinToDock(app.packageName)
+                            }
                         }
                     )
                 }

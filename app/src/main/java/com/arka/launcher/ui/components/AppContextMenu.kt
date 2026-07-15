@@ -3,6 +3,7 @@ package com.arka.launcher.ui.components
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -28,6 +29,10 @@ fun AppContextMenu(
     
     val context = LocalContext.current
     val theme = MaterialTheme.colorScheme
+
+    LaunchedEffect(app.packageName, isPinned) {
+        Log.d("AppContextMenu", "Showing menu for ${app.packageName}, isPinned: $isPinned")
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -68,41 +73,44 @@ fun AppContextMenu(
                 text = "App info",
                 onClick = {
                     onDismiss()
-                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                        data = Uri.parse("package:${app.packageName}")
+                    try {
+                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.parse("package:${app.packageName}")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        Log.e("AppContextMenu", "Error opening app info", e)
                     }
-                    context.startActivity(intent)
                 }
             )
             
-            Divider(color = theme.outline, thickness = 0.5.dp)
+            HorizontalDivider(color = theme.outline, thickness = 0.5.dp)
 
             MenuOption(
                 text = if (isPinned) "Remove from dock" else "Pin to dock",
                 onClick = {
+                    Log.d("AppContextMenu", "Toggle pin clicked for ${app.packageName}, current isPinned: $isPinned")
                     onDismiss()
                     onPinToggle()
                 }
             )
 
-            Divider(color = theme.outline, thickness = 0.5.dp)
+            HorizontalDivider(color = theme.outline, thickness = 0.5.dp)
 
             MenuOption(
                 text = "Uninstall",
                 color = theme.tertiary, // Ember
                 onClick = {
-                    android.util.Log.d("ArkaUninstall", "Uninstall clicked for: ${app.packageName}")
                     onDismiss()
                     try {
                         val intent = Intent(Intent.ACTION_DELETE).apply {
                             data = Uri.parse("package:${app.packageName}")
                             flags = Intent.FLAG_ACTIVITY_NEW_TASK
                         }
-                        android.util.Log.d("ArkaUninstall", "Starting uninstall intent")
                         context.startActivity(intent)
-                        android.util.Log.d("ArkaUninstall", "Uninstall intent started successfully")
                     } catch (e: Exception) {
-                        android.util.Log.e("ArkaUninstall", "Error starting uninstall intent", e)
+                        Log.e("AppContextMenu", "Error starting uninstall", e)
                     }
                 }
             )

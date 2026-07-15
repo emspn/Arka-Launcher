@@ -3,6 +3,7 @@ package com.arka.launcher.ui.drawer
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,6 +15,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -36,6 +38,13 @@ fun DrawerScreen(viewModel: HomeViewModel) {
             .background(theme.background)
             .systemBarsPadding()
             .padding(top = 16.dp)
+            .pointerInput(Unit) {
+                detectVerticalDragGestures { _, dragAmount ->
+                    if (dragAmount > 25f) { // Swipe down to close
+                        viewModel.setLauncherState(LauncherState.HOME)
+                    }
+                }
+            }
     ) {
         // Header
         Row(
