@@ -1,9 +1,6 @@
 package com.arka.launcher.ui.components
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.exponentialDecay
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
@@ -48,10 +45,23 @@ fun ArkaWheel(modifier: Modifier = Modifier) {
     // Tracking for haptic ticks
     var lastHapticRotation by remember { mutableStateOf(0f) }
 
+    // Entrance animation
+    val entranceScale = remember { Animatable(0.6f) }
+    val entranceAlpha = remember { Animatable(0f) }
+    
+    LaunchedEffect(Unit) {
+        launch {
+            entranceScale.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow))
+        }
+        launch {
+            entranceAlpha.animateTo(1f, tween(800))
+        }
+    }
+
     // Ambient Rotation Effect
     LaunchedEffect(isInteracting) {
         if (!isInteracting) {
-            // Continuous slow spin: 360 degrees in 140 seconds
+            // Continuous slow spin
             while (true) {
                 rotation.animateTo(
                     targetValue = rotation.value + 360f,
@@ -66,6 +76,12 @@ fun ArkaWheel(modifier: Modifier = Modifier) {
             .size(236.dp)
             .onGloballyPositioned {
                 centerOffset = Offset(it.size.width / 2f, it.size.height / 2f)
+            }
+            .graphicsLayer {
+                scaleX = entranceScale.value
+                scaleY = entranceScale.value
+                alpha = entranceAlpha.value
+                rotationZ = rotation.value
             }
             .pointerInput(Unit) {
                 coroutineScope {
@@ -124,7 +140,6 @@ fun ArkaWheel(modifier: Modifier = Modifier) {
                     )
                 }
             }
-            .graphicsLayer { rotationZ = rotation.value }
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val canvasSize = size.minDimension

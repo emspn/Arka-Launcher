@@ -12,6 +12,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -85,11 +88,19 @@ class MainActivity : ComponentActivity() {
                         targetState = launcherState,
                         transitionSpec = {
                             if (targetState == LauncherState.DRAWER) {
-                                slideInVertically { it } + fadeIn() togetherWith
-                                        slideOutVertically { -it } + fadeOut()
+                                (fadeIn(animationSpec = tween(400)) + 
+                                 slideInVertically(animationSpec = spring(stiffness = Spring.StiffnessLow)) { it / 2 } +
+                                 scaleIn(initialScale = 0.85f, animationSpec = spring(stiffness = Spring.StiffnessLow)))
+                                .togetherWith(
+                                 fadeOut(animationSpec = tween(300)) + 
+                                 scaleOut(targetScale = 1.1f, animationSpec = tween(300)))
                             } else {
-                                slideInVertically { -it } + fadeIn() togetherWith
-                                        slideOutVertically { it } + fadeOut()
+                                (fadeIn(animationSpec = tween(400)) + 
+                                 scaleIn(initialScale = 1.1f, animationSpec = spring(stiffness = Spring.StiffnessLow)))
+                                .togetherWith(
+                                 fadeOut(animationSpec = tween(300)) + 
+                                 slideOutVertically(animationSpec = spring(stiffness = Spring.StiffnessLow)) { it / 2 } +
+                                 scaleOut(targetScale = 0.85f, animationSpec = tween(300)))
                             }
                         },
                         label = "launcher_transition"
@@ -104,6 +115,7 @@ class MainActivity : ComponentActivity() {
                 if (selectedAppForMenu != null) {
                     val app = selectedAppForMenu!!
                     val isPinned = dockPackages.any { it.trim().equals(app.packageName.trim(), ignoreCase = true) }
+                    val isQuickAccess = viewModel.isAppQuickAccess(app.packageName)
                     Log.d("ArkaMainActivity", "OPEN MENU for: [${app.packageName.trim()}]")
                     Log.d("ArkaMainActivity", "Is Pinned Result: $isPinned")
                     Log.d("ArkaMainActivity", "Current Dock List: ${dockPackages.map { "[$it]" }}")
@@ -111,6 +123,7 @@ class MainActivity : ComponentActivity() {
                     AppContextMenu(
                         app = app,
                         isPinned = isPinned,
+                        isQuickAccess = isQuickAccess,
                         onDismiss = { viewModel.showAppMenu(null) },
                         onPinToggle = {
                             if (isPinned) {
@@ -119,6 +132,13 @@ class MainActivity : ComponentActivity() {
                             } else {
                                 Log.d("ArkaMainActivity", "Adding ${app.packageName}")
                                 viewModel.pinToDock(app.packageName)
+                            }
+                        },
+                        onQuickAccessToggle = {
+                            if (isQuickAccess) {
+                                viewModel.removeFromQuickAccess(app.packageName)
+                            } else {
+                                viewModel.addToQuickAccess(app.packageName)
                             }
                         }
                     )

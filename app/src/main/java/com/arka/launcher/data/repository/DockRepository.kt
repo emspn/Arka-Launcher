@@ -26,6 +26,33 @@ class DockRepository @Inject constructor(
     private val themeKey = stringPreferencesKey("theme_key")
     private val streakKey = intPreferencesKey("focus_streak")
     private val lastFocusDateKey = longPreferencesKey("last_focus_date")
+    private val quickAccessKey = stringPreferencesKey("quick_access_packages")
+
+    val quickAccessPackages: Flow<List<String>> = context.dataStore.data
+        .map { preferences ->
+            preferences[quickAccessKey]?.split(",")
+                ?.map { it.trim() }
+                ?.filter { it.isNotEmpty() } ?: emptyList()
+        }
+
+    suspend fun addToQuickAccess(packageName: String) {
+        context.dataStore.edit { preferences ->
+            val current = preferences[quickAccessKey] ?: ""
+            val list = current.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toMutableList()
+            if (!list.contains(packageName)) {
+                list.add(packageName)
+                preferences[quickAccessKey] = list.joinToString(",")
+            }
+        }
+    }
+
+    suspend fun removeFromQuickAccess(packageName: String) {
+        context.dataStore.edit { preferences ->
+            val current = preferences[quickAccessKey] ?: ""
+            val newList = current.split(",").map { it.trim() }.filter { it.isNotEmpty() && it != packageName }
+            preferences[quickAccessKey] = newList.joinToString(",")
+        }
+    }
 
     val dockPackages: Flow<List<String>> = context.dataStore.data
         .map { preferences ->

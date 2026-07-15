@@ -81,6 +81,24 @@ class HomeViewModel @Inject constructor(
         initialValue = emptyList()
     )
 
+    val quickAccessPackages = dockRepository.quickAccessPackages.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
+    val quickAccessApps = combine(apps, quickAccessPackages) { appsList, packages ->
+        packages.mapNotNull { pkg -> appsList.find { it.packageName == pkg } }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
+    val isAppQuickAccess = { packageName: String ->
+        quickAccessPackages.value.contains(packageName)
+    }
+
     val filteredApps = combine(apps, _searchQuery) { appsList, query ->
         val q = query.trim().lowercase()
         if (q.isEmpty()) return@combine appsList
@@ -198,6 +216,18 @@ class HomeViewModel @Inject constructor(
     fun reorderDock(newPackages: List<String>) {
         viewModelScope.launch {
             dockRepository.reorderDock(newPackages)
+        }
+    }
+
+    fun addToQuickAccess(packageName: String) {
+        viewModelScope.launch {
+            dockRepository.addToQuickAccess(packageName)
+        }
+    }
+
+    fun removeFromQuickAccess(packageName: String) {
+        viewModelScope.launch {
+            dockRepository.removeFromQuickAccess(packageName)
         }
     }
 

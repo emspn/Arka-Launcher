@@ -22,16 +22,18 @@ import com.arka.launcher.data.local.InstalledApp
 fun AppContextMenu(
     app: InstalledApp?,
     isPinned: Boolean,
+    isQuickAccess: Boolean,
     onDismiss: () -> Unit,
-    onPinToggle: () -> Unit
+    onPinToggle: () -> Unit,
+    onQuickAccessToggle: () -> Unit
 ) {
     if (app == null) return
     
     val context = LocalContext.current
     val theme = MaterialTheme.colorScheme
 
-    LaunchedEffect(app.packageName, isPinned) {
-        Log.d("AppContextMenu", "Showing menu for ${app.packageName}, isPinned: $isPinned")
+    LaunchedEffect(app.packageName, isPinned, isQuickAccess) {
+        Log.d("AppContextMenu", "Showing menu for ${app.packageName}, isPinned: $isPinned, isQuickAccess: $isQuickAccess")
     }
 
     ModalBottomSheet(
@@ -93,6 +95,16 @@ fun AppContextMenu(
                     Log.d("AppContextMenu", "Toggle pin clicked for ${app.packageName}, current isPinned: $isPinned")
                     onDismiss()
                     onPinToggle()
+                }
+            )
+
+            HorizontalDivider(color = theme.outline, thickness = 0.5.dp)
+
+            MenuOption(
+                text = if (isQuickAccess) "Remove from Quick Access" else "Add to Quick Access",
+                onClick = {
+                    onDismiss()
+                    onQuickAccessToggle()
                 }
             )
 

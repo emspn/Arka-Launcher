@@ -73,9 +73,10 @@ fun HomeScreen(
     val apps by viewModel.apps.collectAsState()
     val dockApps by viewModel.dockApps.collectAsState()
     val isPrabhaMode by viewModel.isPrabhaMode.collectAsState()
+    val quickAccessApps by viewModel.quickAccessApps.collectAsState()
     val showDefaultLauncherPrompt by viewModel.showDefaultLauncherPrompt.collectAsState()
 
-    val pagerState = rememberPagerState(initialPage = 1, pageCount = { 2 })
+    val pagerState = rememberPagerState(initialPage = 1, pageCount = { 3 })
 
     if (apps.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize().background(theme.background), contentAlignment = Alignment.Center) {
@@ -183,18 +184,24 @@ fun HomeScreen(
                             modifier = Modifier.weight(1f),
                             verticalAlignment = Alignment.CenterVertically
                         ) { page ->
-                            if (page == 1) {
-                                Column(
-                                    modifier = Modifier.fillMaxSize(),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    ArkaWheel()
-                                    Spacer(modifier = Modifier.height(14.dp))
-                                    ClockDisplay()
+                            when (page) {
+                                1 -> {
+                                    Column(
+                                        modifier = Modifier.fillMaxSize(),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        ArkaWheel()
+                                        Spacer(modifier = Modifier.height(14.dp))
+                                        ClockDisplay()
+                                    }
                                 }
-                            } else {
-                                WidgetPage(viewModel)
+                                0 -> {
+                                    WidgetPage(viewModel)
+                                }
+                                2 -> {
+                                    QuickAccessPage(viewModel)
+                                }
                             }
                         }
 
@@ -205,7 +212,7 @@ fun HomeScreen(
                                 .fillMaxWidth(),
                             horizontalArrangement = Arrangement.Center
                         ) {
-                            repeat(2) { iteration ->
+                            repeat(3) { iteration ->
                                 val color = if (pagerState.currentPage == iteration) theme.primary else theme.outline
                                 Box(
                                     modifier = Modifier
@@ -551,6 +558,104 @@ fun DailyVerseWidget() {
                 lineHeight = 22.sp
             )
             Text("— Rumi", color = theme.onSurfaceVariant, fontSize = 10.sp, modifier = Modifier.padding(top = 8.dp))
+        }
+    }
+}
+
+@Composable
+fun QuickAccessPage(viewModel: HomeViewModel) {
+    val quickAccessApps by viewModel.quickAccessApps.collectAsState()
+    val theme = MaterialTheme.colorScheme
+    val context = LocalContext.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            "Quick Access",
+            color = theme.secondary,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.2.sp
+        )
+        Text(
+            "Pinned for your convenience",
+            color = theme.onSurfaceVariant.copy(alpha = 0.7f),
+            fontSize = 11.sp
+        )
+        
+        Spacer(modifier = Modifier.height(32.dp))
+
+        if (quickAccessApps.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .weight(1f)
+                    .clip(RoundedCornerShape(32.dp))
+                    .background(theme.surfaceVariant.copy(alpha = 0.3f))
+                    .border(1.dp, theme.outline.copy(alpha = 0.2f), RoundedCornerShape(32.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = Icons.Default.Add, 
+                        contentDescription = null, 
+                        tint = theme.outline,
+                        modifier = Modifier.size(32.dp)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Long press apps in drawer to pin here", color = theme.outline, fontSize = 12.sp)
+                }
+            }
+        } else {
+            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(4),
+                modifier = Modifier.fillMaxSize().weight(1f),
+                verticalArrangement = Arrangement.spacedBy(28.dp),
+                horizontalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                items(quickAccessApps.size) { index ->
+                    val app = quickAccessApps[index]
+                    
+                    // Simple staggered entrance animation
+                    val visible = remember { mutableStateOf(false) }
+                    LaunchedEffect(Unit) {
+                        delay(index * 40L)
+                        visible.value = true
+                    }
+
+                    AnimatedVisibility(
+                        visible = visible.value,
+                        enter = fadeIn(tween(400)) + scaleIn(initialScale = 0.8f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy))
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.clickable {
+                                val intent = context.packageManager.getLaunchIntentForPackage(app.packageName)
+                                intent?.let { context.startActivity(it) }
+                            }
+                        ) {
+                            AppIcon(
+                                packageName = app.packageName,
+                                size = 52.dp,
+                                onLongClick = { viewModel.showAppMenu(app) }
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                app.appName,
+                                color = theme.onSurface,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
