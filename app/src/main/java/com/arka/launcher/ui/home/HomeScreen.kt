@@ -75,7 +75,7 @@ fun HomeScreen(
     val isPrabhaMode by viewModel.isPrabhaMode.collectAsState()
     val showDefaultLauncherPrompt by viewModel.showDefaultLauncherPrompt.collectAsState()
 
-    val pagerState = rememberPagerState(pageCount = { 2 })
+    val pagerState = rememberPagerState(initialPage = 1, pageCount = { 2 })
 
     if (apps.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize().background(theme.background), contentAlignment = Alignment.Center) {
@@ -183,7 +183,7 @@ fun HomeScreen(
                             modifier = Modifier.weight(1f),
                             verticalAlignment = Alignment.CenterVertically
                         ) { page ->
-                            if (page == 0) {
+                            if (page == 1) {
                                 Column(
                                     modifier = Modifier.fillMaxSize(),
                                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -222,7 +222,7 @@ fun HomeScreen(
 
             // Bottom UI (Hidden in Prabha Mode and on Widget Page)
             AnimatedVisibility(
-                visible = !isPrabhaMode && pagerState.currentPage == 0,
+                visible = !isPrabhaMode && pagerState.currentPage == 1,
                 enter = fadeIn() + slideInVertically { it },
                 exit = fadeOut() + slideOutVertically { it }
             ) {
