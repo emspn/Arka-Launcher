@@ -1,7 +1,9 @@
 package com.arka.launcher.ui.components
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.exponentialDecay
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
@@ -13,15 +15,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
-import kotlin.math.PI
-import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.sin
+import kotlin.math.*
 
 @Composable
 fun ArkaWheel(modifier: Modifier = Modifier) {
@@ -30,15 +31,35 @@ fun ArkaWheel(modifier: Modifier = Modifier) {
     val copperLight = theme.secondary
     val bg1 = theme.surface
     val bg2 = theme.surfaceVariant
+    val haptic = LocalHapticFeedback.current
 
     val rotation = remember { Animatable(0f) }
     var centerOffset by remember { mutableStateOf(Offset.Zero) }
     val scope = rememberCoroutineScope()
 
+    // State to track if user is interacting
+    var isInteracting by remember { mutableStateOf(false) }
+    
     // Tracking for momentum
     var lastAngle by remember { mutableStateOf(0f) }
     var lastTime by remember { mutableLongStateOf(0L) }
     var velocity by remember { mutableStateOf(0f) }
+    
+    // Tracking for haptic ticks
+    var lastHapticRotation by remember { mutableStateOf(0f) }
+
+    // Ambient Rotation Effect
+    LaunchedEffect(isInteracting) {
+        if (!isInteracting) {
+            // Continuous slow spin: 360 degrees in 140 seconds
+            while (true) {
+                rotation.animateTo(
+                    targetValue = rotation.value + 360f,
+                    animationSpec = tween(durationMillis = 140000, easing = LinearEasing)
+                )
+            }
+        }
+    }
 
     Box(
         modifier = modifier
@@ -50,12 +71,14 @@ fun ArkaWheel(modifier: Modifier = Modifier) {
                 coroutineScope {
                     detectDragGestures(
                         onDragStart = { offset ->
+                            isInteracting = true
                             scope.launch { rotation.stop() }
                             val dx = offset.x - centerOffset.x
                             val dy = offset.y - centerOffset.y
                             lastAngle = (atan2(dx, -dy) * 180 / PI).toFloat()
                             lastTime = System.currentTimeMillis()
                             velocity = 0f
+                            lastHapticRotation = rotation.value
                         },
                         onDrag = { change, _ ->
                             val currentPos = change.position
@@ -74,6 +97,12 @@ fun ArkaWheel(modifier: Modifier = Modifier) {
                             
                             scope.launch {
                                 rotation.snapTo(rotation.value + delta)
+                                
+                                // Haptic feedback every ~15 degrees
+                                if (abs(rotation.value - lastHapticRotation) >= 15f) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    lastHapticRotation = rotation.value
+                                }
                             }
                             
                             lastAngle = angle
@@ -85,7 +114,12 @@ fun ArkaWheel(modifier: Modifier = Modifier) {
                                     initialVelocity = velocity * 1000f, // deg/s
                                     animationSpec = exponentialDecay(frictionMultiplier = 1.5f)
                                 )
+                                // After decay finishes, hand back to ambient rotation
+                                isInteracting = false
                             }
+                        },
+                        onDragCancel = {
+                            isInteracting = false
                         }
                     )
                 }
@@ -111,8 +145,14 @@ fun ArkaWheel(modifier: Modifier = Modifier) {
                 
                 drawLine(
                     color = copper,
-                    start = Offset(cx + r1.toFloat() * cos(angleRad).toFloat(), cy + r1.toFloat() * sin(angleRad).toFloat()),
-                    end = Offset(cx + r2.toFloat() * cos(angleRad).toFloat(), cy + r2.toFloat() * sin(angleRad).toFloat()),
+                    start = Offset(
+                        cx + (r1 * cos(angleRad)).toFloat(),
+                        cy + (r1 * sin(angleRad)).toFloat()
+                    ),
+                    end = Offset(
+                        cx + (r2 * cos(angleRad)).toFloat(),
+                        cy + (r2 * sin(angleRad)).toFloat()
+                    ),
                     strokeWidth = if (isMajor) 1.4.dp.toPx() else 0.8.dp.toPx(),
                     alpha = if (isMajor) 0.95f else 0.55f
                 )

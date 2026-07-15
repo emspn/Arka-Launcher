@@ -57,6 +57,11 @@ import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.cos
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.interaction.*
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.arka.launcher.ui.components.PrabhaStatsWidget
 import kotlin.math.sin
 
 @Composable
@@ -68,6 +73,8 @@ fun HomeScreen(
     val apps by viewModel.apps.collectAsState()
     val dockApps by viewModel.dockApps.collectAsState()
     val isPrabhaMode by viewModel.isPrabhaMode.collectAsState()
+    val screenTime by viewModel.screenTime.collectAsState()
+    val focusStreak by viewModel.focusStreak.collectAsState()
     val showDefaultLauncherPrompt by viewModel.showDefaultLauncherPrompt.collectAsState()
 
     val pagerState = rememberPagerState(pageCount = { 2 })
@@ -87,7 +94,7 @@ fun HomeScreen(
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(Unit) {
-                // Background long press for settings - ONLY trigger if not consumed by children
+                // Background long press for settings
                 detectTapGestures(
                     onLongPress = {
                         viewModel.showHomeSettings(true)
@@ -127,37 +134,17 @@ fun HomeScreen(
                     letterSpacing = 1.sp
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(
+                    TopBarButton(
                         onClick = { viewModel.cycleTheme() },
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(theme.surface)
-                            .border(1.dp, theme.outline, RoundedCornerShape(10.dp))
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Palette,
-                            contentDescription = "Cycle Theme",
-                            tint = theme.onSurface,
-                            modifier = Modifier.size(15.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    IconButton(
+                        icon = Icons.Rounded.Palette,
+                        contentDescription = "Cycle Theme"
+                    )
+                    TopBarButton(
                         onClick = { viewModel.togglePrabhaMode() },
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (isPrabhaMode) theme.tertiary else theme.surface)
-                            .border(1.dp, theme.outline, RoundedCornerShape(10.dp))
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_feather),
-                            contentDescription = "Toggle Prabha Focus Mode",
-                            tint = theme.onSurface,
-                            modifier = Modifier.size(15.dp)
-                        )
-                    }
+                        icon = painterResource(id = R.drawable.ic_feather),
+                        contentDescription = "Toggle Prabha Focus Mode",
+                        isToggled = isPrabhaMode
+                    )
                 }
             }
 
@@ -220,7 +207,7 @@ fun HomeScreen(
                                     Spacer(modifier = Modifier.height(20.dp))
                                     WeatherWidget()
                                     ClockWidget()
-                                    PrabhaStatsWidget()
+                                    PrabhaStatsWidget(screenTime = screenTime, focusStreak = focusStreak)
                                     DailyVerseWidget()
                                     Spacer(modifier = Modifier.height(20.dp))
                                 }
@@ -313,7 +300,7 @@ fun DraggableDock(
     val haptic = LocalHapticFeedback.current
     val density = LocalDensity.current
     
-    // We use the actual dockApps from the ViewModel to ensure it stays in sync
+    // Key state for immediate visual feedback
     var currentList by remember(dockApps) { mutableStateOf(dockApps) }
     var draggedPkg by remember { mutableStateOf<String?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
@@ -367,8 +354,7 @@ fun DraggableDock(
                                                 val event = awaitPointerEvent()
                                                 val change = event.changes.first()
                                                 if (change.pressed.not()) {
-                                                    // RELEASE before timeout = TAP
-                                                    Log.d("ArkaDock", "Open: ${app.packageName}")
+                                                    // RELEASE before timeout -> TAP
                                                     val intent = context.packageManager.getLaunchIntentForPackage(app.packageName)
                                                     intent?.let {
                                                         it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -378,7 +364,8 @@ fun DraggableDock(
                                                     return@withTimeout
                                                 }
                                                 if ((change.position - down.position).getDistance() > slop) {
-                                                    return@withTimeout // Cancel if moved too much early
+                                                    // Cancel long press check if moved early
+                                                    return@withTimeout 
                                                 }
                                             }
                                         }
@@ -388,18 +375,16 @@ fun DraggableDock(
 
                                     if (isLongPress) {
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        // DO NOT show menu here. Wait for release.
+                                        // User requested menu to show IMMEDIATELY after vibration
+                                        viewModel.showAppMenu(app)
                                         
                                         while (true) {
                                             val event = awaitPointerEvent()
                                             val change = event.changes.first()
                                             
                                             if (change.pressed.not()) {
-                                                if (!movedSignificantly) {
-                                                    // LONG PRESS RELEASED WITHOUT DRAG -> SHOW MENU
-                                                    viewModel.showAppMenu(app)
-                                                } else {
-                                                    // DRAG RELEASED -> COMMIT NEW ORDER
+                                                if (movedSignificantly) {
+                                                    // Commit to DB on release
                                                     viewModel.reorderDock(currentList.map { it.packageName })
                                                 }
                                                 draggedPkg = null
@@ -450,7 +435,6 @@ fun DraggableDock(
                     }
                 }
             } else {
-                // Empty slot with Plus Icon
                 Box(
                     modifier = Modifier
                         .size(46.dp)
@@ -540,43 +524,6 @@ fun ClockWidget() {
     }
 }
 
-@Composable
-fun PrabhaStatsWidget() {
-    val theme = MaterialTheme.colorScheme
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = theme.surface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, theme.outline),
-        shape = RoundedCornerShape(22.dp)
-    ) {
-        Column(modifier = Modifier.padding(18.dp, 20.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom
-            ) {
-                Text("Prabha stats", color = theme.onSurfaceVariant, fontSize = 11.sp, letterSpacing = 1.sp)
-                Text("demo data", color = theme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 8.sp)
-            }
-            Spacer(modifier = Modifier.height(10.dp))
-            StatRow("Screen time", "2h 14m")
-            StatRow("Notifications", "6")
-            StatRow("Focus streak", "3 days")
-        }
-    }
-}
-
-@Composable
-fun StatRow(label: String, value: String) {
-    val theme = MaterialTheme.colorScheme
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label, color = theme.onSurface, fontSize = 12.sp)
-        Text(value, color = theme.secondary, fontSize = 12.sp)
-    }
-}
 
 @Composable
 fun DailyVerseWidget() {
@@ -725,6 +672,66 @@ fun KonarkSilhouette(modifier: Modifier = Modifier) {
                     end = Offset(x2, y2),
                     alpha = opacity,
                     strokeWidth = 0.6.dp.toPx()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun TopBarButton(
+    onClick: () -> Unit,
+    icon: Any,
+    contentDescription: String?,
+    isToggled: Boolean = false
+) {
+    val theme = MaterialTheme.colorScheme
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.92f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy),
+        label = "scale"
+    )
+
+    IconButton(
+        onClick = onClick,
+        interactionSource = interactionSource,
+        modifier = Modifier
+            .size(48.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+    ) {
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(
+                    if (isToggled) theme.primaryContainer 
+                    else theme.surface.copy(alpha = 0.8f)
+                )
+                .border(
+                    1.dp, 
+                    if (isToggled) theme.primary.copy(alpha = 0.5f) 
+                    else theme.outline.copy(alpha = 0.5f), 
+                    RoundedCornerShape(12.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            when (icon) {
+                is ImageVector -> Icon(
+                    imageVector = icon,
+                    contentDescription = contentDescription,
+                    tint = if (isToggled) theme.primary else theme.onSurface,
+                    modifier = Modifier.size(18.dp)
+                )
+                is Painter -> Icon(
+                    painter = icon,
+                    contentDescription = contentDescription,
+                    tint = if (isToggled) theme.primary else theme.onSurface,
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }

@@ -1,10 +1,13 @@
 package com.arka.launcher.ui.home
 
+import android.app.AppOpsManager
 import android.app.role.RoleManager
+import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Process
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arka.launcher.data.local.InstalledApp
@@ -12,8 +15,12 @@ import com.arka.launcher.data.repository.AppRepository
 import com.arka.launcher.data.repository.DockRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.ZoneId
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 enum class LauncherState {
@@ -105,6 +112,26 @@ class HomeViewModel @Inject constructor(
         initialValue = emptyMap()
     )
 
+    val focusStreak = dockRepository.focusStreak.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = 0
+    )
+
+    private val _screenTimeMillis = MutableStateFlow(0L)
+    val screenTime = _screenTimeMillis.map { millis ->
+        val hours = TimeUnit.MILLISECONDS.toHours(millis)
+        val minutes = TimeUnit.MILLISECONDS.toMinutes(millis) % 60
+        "${hours}h ${minutes}m"
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = "0h 0m"
+    )
+
+    private val _hasUsageStatsPermission = MutableStateFlow(false)
+    val hasUsageStatsPermission: StateFlow<Boolean> = _hasUsageStatsPermission
+
     fun onSearchQueryChange(query: String) {
         _searchQuery.value = query
     }
@@ -118,7 +145,42 @@ class HomeViewModel @Inject constructor(
     }
 
     fun togglePrabhaMode() {
-        _isPrabhaMode.value = !_isPrabhaMode.value
+        val nextMode = !_isPrabhaMode.value
+        _isPrabhaMode.value = nextMode
+        if (nextMode) {
+            viewModelScope.launch {
+                dockRepository.recordFocusSession()
+            }
+        }
+    }
+
+    fun updateUsageStatsPermission() {
+        val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            appOps.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName)
+        } else {
+            @Suppress("DEPRECATION")
+            appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName)
+        }
+        val granted = mode == AppOpsManager.MODE_ALLOWED
+        _hasUsageStatsPermission.value = granted
+        if (granted) {
+            refreshScreenTime()
+        }
+    }
+
+    fun refreshScreenTime() {
+        if (!_hasUsageStatsPermission.value) return
+        
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+            val endTime = System.currentTimeMillis()
+            val startTime = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            
+            val stats = usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, endTime)
+            val totalTime = stats?.sumOf { it.totalTimeInForeground } ?: 0L
+            _screenTimeMillis.value = totalTime
+        }
     }
 
     fun pinToDock(packageName: String) {
@@ -188,5 +250,6 @@ class HomeViewModel @Inject constructor(
             repository.refreshApps()
         }
         checkDefaultLauncher()
+        updateUsageStatsPermission()
     }
 }

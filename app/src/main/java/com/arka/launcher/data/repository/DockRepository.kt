@@ -5,11 +5,14 @@ import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.time.LocalDate
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -21,6 +24,8 @@ class DockRepository @Inject constructor(
 ) {
     private val dockKey = stringPreferencesKey("dock_packages")
     private val themeKey = stringPreferencesKey("theme_key")
+    private val streakKey = intPreferencesKey("focus_streak")
+    private val lastFocusDateKey = longPreferencesKey("last_focus_date")
 
     val dockPackages: Flow<List<String>> = context.dataStore.data
         .map { preferences ->
@@ -35,6 +40,28 @@ class DockRepository @Inject constructor(
         .map { preferences ->
             preferences[themeKey] ?: "sandstone"
         }
+
+    val focusStreak: Flow<Int> = context.dataStore.data
+        .map { preferences ->
+            preferences[streakKey] ?: 0
+        }
+
+    suspend fun recordFocusSession() {
+        context.dataStore.edit { prefs ->
+            val todayEpoch = LocalDate.now().toEpochDay()
+            val lastDateEpoch = prefs[lastFocusDateKey] ?: 0L
+            val currentStreak = prefs[streakKey] ?: 0
+
+            if (lastDateEpoch == todayEpoch) return@edit
+
+            if (lastDateEpoch == todayEpoch - 1) {
+                prefs[streakKey] = currentStreak + 1
+            } else {
+                prefs[streakKey] = 1
+            }
+            prefs[lastFocusDateKey] = todayEpoch
+        }
+    }
 
     suspend fun setTheme(key: String) {
         context.dataStore.edit { preferences ->
