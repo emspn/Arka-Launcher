@@ -110,18 +110,9 @@ class HomeViewModel @Inject constructor(
         val q = query.trim().lowercase()
         if (q.isEmpty()) return@combine appsList
 
-        val starts = mutableListOf<InstalledApp>()
-        val includes = mutableListOf<InstalledApp>()
-        
-        for (app in appsList) {
-            val name = app.appName.lowercase()
-            if (name.startsWith(q)) {
-                starts.add(app)
-            } else if (name.contains(q)) {
-                includes.add(app)
-            }
-        }
-        starts + includes
+        appsList.filter { 
+            it.appName.contains(q, ignoreCase = true) 
+        }.sortedWith(compareBy({ !it.appName.lowercase().startsWith(q) }, { it.appName.lowercase() }))
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -131,7 +122,8 @@ class HomeViewModel @Inject constructor(
     val groupedApps = filteredApps.map { appsList ->
         appsList.groupBy { it.appName.firstOrNull()?.uppercaseChar() ?: '#' }
             .toSortedMap()
-    }.stateIn(
+    }.flowOn(kotlinx.coroutines.Dispatchers.Default)
+    .stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = emptyMap()

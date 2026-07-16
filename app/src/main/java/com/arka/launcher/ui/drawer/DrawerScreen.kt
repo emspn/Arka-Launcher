@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import com.arka.launcher.ui.components.AppIcon
 import com.arka.launcher.ui.home.HomeViewModel
 import com.arka.launcher.ui.home.LauncherState
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
@@ -184,8 +185,9 @@ fun DrawerScreen(viewModel: HomeViewModel) {
         }
 
         // Alphabet Fast Scroll
-        val alphabet = ('A'..'Z').toList() + '#'
+        val alphabet = remember { ('A'..'Z').toList() + '#' }
         var alphabetHeight by remember { mutableIntStateOf(0) }
+        var scrollJob by remember { mutableStateOf<Job?>(null) }
 
         Column(
             modifier = Modifier
@@ -214,8 +216,11 @@ fun DrawerScreen(viewModel: HomeViewModel) {
                                         val key = sections[i]
                                         itemIndex += (groupedApps[key]?.size ?: 0) + 1
                                     }
-                                    // Use scrollToItem for instantaneous feedback during drag
-                                    launch { listState.scrollToItem(itemIndex) }
+                                    
+                                    scrollJob?.cancel()
+                                    scrollJob = launch { 
+                                        listState.scrollToItem(itemIndex) 
+                                    }
                                 }
                             }
                         )
@@ -230,7 +235,8 @@ fun DrawerScreen(viewModel: HomeViewModel) {
                         .size(width = 32.dp, height = 18.dp)
                         .pointerInput(char) {
                             detectTapGestures {
-                                scope.launch {
+                                scrollJob?.cancel()
+                                scrollJob = scope.launch {
                                     val sections = groupedApps.keys.toList()
                                     val sectionIndex = if (char == '#') {
                                         sections.indexOfFirst { it == '#' }
