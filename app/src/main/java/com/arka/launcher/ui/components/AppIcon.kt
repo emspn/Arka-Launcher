@@ -58,7 +58,8 @@ fun AppIcon(
     val request = remember(packageName) {
         ImageRequest.Builder(context)
             .data(AppIconData(packageName))
-            .allowHardware(false)
+            .crossfade(200)
+            .allowHardware(true) // Hardware bitmaps are faster for rendering
             .build()
     }
 

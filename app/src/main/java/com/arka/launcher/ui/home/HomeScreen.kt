@@ -120,7 +120,6 @@ fun HomeScreen(
                 .padding(vertical = 18.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Top Bar - Always visible in Prabha or Widget Page
             AnimatedVisibility(
                 visible = pagerState.currentPage == 0 || isPrabhaMode,
                 enter = fadeIn() + expandVertically(),
@@ -181,7 +180,6 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // Main Content Area (Pager)
             Box(
                 modifier = Modifier.weight(1f),
                 contentAlignment = Alignment.Center
@@ -232,7 +230,6 @@ fun HomeScreen(
                 }
             }
 
-            // Bottom UI
             AnimatedVisibility(
                 visible = !isPrabhaMode && pagerState.currentPage == 1,
                 enter = fadeIn() + slideInVertically { it },
@@ -242,7 +239,6 @@ fun HomeScreen(
                     modifier = Modifier.padding(horizontal = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Search Bar Pill
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -341,7 +337,7 @@ fun DraggableDock(
                                             while (true) {
                                                 val event = awaitPointerEvent()
                                                 val change = event.changes.first()
-                                                if (change.pressed.not()) {
+                                                if (!change.pressed) {
                                                     scope.launch { interactionSource.emit(PressInteraction.Release(press)) }
                                                     val intent = context.packageManager.getLaunchIntentForPackage(app.packageName)
                                                     intent?.let {
@@ -366,10 +362,13 @@ fun DraggableDock(
                                         while (true) {
                                             val event = awaitPointerEvent()
                                             val change = event.changes.first()
-                                            if (change.pressed.not()) {
+                                            if (!change.pressed) {
                                                 scope.launch { interactionSource.emit(PressInteraction.Release(press)) }
-                                                if (reorderActive) viewModel.reorderDock(currentList.map { it.packageName })
-                                                else viewModel.showAppMenu(app)
+                                                if (reorderActive) {
+                                                    viewModel.reorderDock(currentList.map { it.packageName })
+                                                } else {
+                                                    viewModel.showAppMenu(app)
+                                                }
                                                 draggedPkg = null
                                                 dragOffset = 0f
                                                 change.consume()
@@ -447,7 +446,7 @@ fun QuickAccessPage(viewModel: HomeViewModel) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(text = "Quick Access", color = theme.secondary, fontSize = 20.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
-        Text(text = "Long press to reorder or manage", color = theme.onSurfaceVariant.copy(alpha = 0.7f), fontSize = 11.sp)
+        Text(text = "Long press to manage", color = theme.onSurfaceVariant.copy(alpha = 0.7f), fontSize = 11.sp)
         Spacer(modifier = Modifier.height(32.dp))
         
         if (quickAccessApps.isEmpty()) {
@@ -467,7 +466,7 @@ fun QuickAccessPage(viewModel: HomeViewModel) {
             androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
                 columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(4),
                 modifier = Modifier.fillMaxSize().weight(1f),
-                contentPadding = PaddingValues(bottom = 80.dp),
+                contentPadding = PaddingValues(bottom = 100.dp),
                 verticalArrangement = Arrangement.spacedBy(28.dp),
                 horizontalArrangement = Arrangement.spacedBy(20.dp)
             ) {
@@ -508,7 +507,7 @@ fun QuickAccessPage(viewModel: HomeViewModel) {
                                             while (true) {
                                                 val event = awaitPointerEvent()
                                                 val change = event.changes.first()
-                                                if (change.pressed.not()) {
+                                                if (!change.pressed) {
                                                     scope.launch { interactionSource.emit(PressInteraction.Release(press)) }
                                                     val intent = context.packageManager.getLaunchIntentForPackage(app.packageName)
                                                     intent?.let { context.startActivity(it) }
@@ -529,10 +528,13 @@ fun QuickAccessPage(viewModel: HomeViewModel) {
                                         while (true) {
                                             val event = awaitPointerEvent()
                                             val change = event.changes.first()
-                                            if (change.pressed.not()) {
+                                            if (!change.pressed) {
                                                 scope.launch { interactionSource.emit(PressInteraction.Release(press)) }
-                                                if (reorderActive) viewModel.reorderQuickAccess(currentList.map { it.packageName })
-                                                else viewModel.showAppMenu(app)
+                                                if (reorderActive) {
+                                                    viewModel.reorderQuickAccess(currentList.map { it.packageName })
+                                                } else {
+                                                    viewModel.showAppMenu(app)
+                                                }
                                                 draggedPkg = null
                                                 dragOffset = Offset.Zero
                                                 change.consume()
@@ -628,9 +630,9 @@ fun ClockWidget() {
         border = androidx.compose.foundation.BorderStroke(1.dp, theme.outline),
         shape = RoundedCornerShape(22.dp)
     ) {
+        val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+        val dateFormat = remember { SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()) }
         Column(modifier = Modifier.padding(18.dp, 20.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-            val dateFormat = SimpleDateFormat("EEEE, d MMMM", Locale.getDefault())
             Text(text = timeFormat.format(currentTime.time), color = theme.onSurface, fontSize = 30.sp, fontWeight = FontWeight.Bold)
             Text(text = dateFormat.format(currentTime.time).uppercase(), color = theme.onSurfaceVariant, fontSize = 10.sp, letterSpacing = 1.5.sp)
         }

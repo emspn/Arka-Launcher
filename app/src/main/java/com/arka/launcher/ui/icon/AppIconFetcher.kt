@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.util.Log
+import android.util.LruCache
 import coil.ImageLoader
 import coil.decode.DataSource
 import coil.fetch.DrawableResult
@@ -18,19 +19,33 @@ class AppIconFetcher(
     private val context: Context
 ) : Fetcher {
 
+    companion object {
+        // In-memory cache for icons to avoid repeated Bitmap creation and PM calls
+        private val iconCache = LruCache<String, Bitmap>(50)
+    }
+
     override suspend fun fetch(): FetchResult? {
-        Log.d("ArkaIcon", "fetch() for $packageName")
+        val cachedBitmap = iconCache.get(packageName)
+        if (cachedBitmap != null) {
+            return DrawableResult(
+                drawable = BitmapDrawable(context.resources, cachedBitmap),
+                isSampled = false,
+                dataSource = DataSource.MEMORY
+            )
+        }
+
         val pm = context.packageManager
         return try {
             val drawable = pm.getApplicationIcon(packageName)
             
-            val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 192
-            val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 192
-            
-            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            // Standardize icon size for better performance (192x192 is ideal for high DPI)
+            val size = 192
+            val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
-            drawable.setBounds(0, 0, canvas.width, canvas.height)
+            drawable.setBounds(0, 0, size, size)
             drawable.draw(canvas)
+            
+            iconCache.put(packageName, bitmap)
             
             DrawableResult(
                 drawable = BitmapDrawable(context.resources, bitmap),
