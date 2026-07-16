@@ -13,6 +13,7 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -23,10 +24,12 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
@@ -54,11 +57,13 @@ import com.arka.launcher.ui.components.ArkaWheel
 import com.arka.launcher.ui.components.PrabhaScene
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.cos
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.interaction.*
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.arka.launcher.ui.components.PrabhaStatsWidget
@@ -75,8 +80,15 @@ fun HomeScreen(
     val isPrabhaMode by viewModel.isPrabhaMode.collectAsState()
     val quickAccessApps by viewModel.quickAccessApps.collectAsState()
     val showDefaultLauncherPrompt by viewModel.showDefaultLauncherPrompt.collectAsState()
+    val savedPage by viewModel.currentPage.collectAsState()
 
-    val pagerState = rememberPagerState(initialPage = 1, pageCount = { 3 })
+    val pagerState = rememberPagerState(initialPage = savedPage, pageCount = { 3 })
+    val scope = rememberCoroutineScope()
+
+    // Sync pagerState back to ViewModel
+    LaunchedEffect(pagerState.currentPage) {
+        viewModel.setCurrentPage(pagerState.currentPage)
+    }
 
     if (apps.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize().background(theme.background), contentAlignment = Alignment.Center) {
@@ -92,17 +104,9 @@ fun HomeScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .pointerInput(Unit) {
-                // Background long press for settings
-                detectTapGestures(
-                    onLongPress = {
-                        viewModel.showHomeSettings(true)
-                    }
-                )
-            }
-            .pointerInput(Unit) {
+            .pointerInput(isPrabhaMode) {
                 detectVerticalDragGestures { _, dragAmount ->
-                    if (dragAmount < -20f) { // Swipe up
+                    if (dragAmount < -25f && !isPrabhaMode) { // Swipe up
                         viewModel.setLauncherState(LauncherState.DRAWER)
                     }
                 }
@@ -117,37 +121,56 @@ fun HomeScreen(
                 .padding(vertical = 18.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Top Bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            // Top Bar - VISIBLE ON WIDGET PAGE (Page 0) OR PRABHA MODE
+            AnimatedVisibility(
+                visible = pagerState.currentPage == 0 || isPrabhaMode,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
             ) {
-                Text(
-                    text = "Arka",
-                    color = theme.secondary,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TopBarButton(
-                        onClick = { viewModel.cycleTheme() },
-                        icon = Icons.Rounded.Palette,
-                        contentDescription = "Cycle Theme"
-                    )
-                    TopBarButton(
-                        onClick = { viewModel.togglePrabhaMode() },
-                        icon = painterResource(id = R.drawable.ic_feather),
-                        contentDescription = "Toggle Prabha Focus Mode",
-                        isToggled = isPrabhaMode
-                    )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                        .height(56.dp)
+                ) {
+                    if (!isPrabhaMode) {
+                        Text(
+                            text = "Arka",
+                            color = theme.secondary,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp,
+                            modifier = Modifier.align(Alignment.CenterStart)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.align(Alignment.CenterEnd),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TopBarButton(
+                            onClick = { viewModel.setLauncherState(LauncherState.SETTINGS) },
+                            icon = Icons.Rounded.Settings,
+                            contentDescription = "Arka Settings"
+                        )
+                        if (!isPrabhaMode) {
+                            TopBarButton(
+                                onClick = { viewModel.cycleTheme() },
+                                icon = Icons.Rounded.Palette,
+                                contentDescription = "Cycle Theme"
+                            )
+                            TopBarButton(
+                                onClick = { viewModel.togglePrabhaMode() },
+                                icon = painterResource(id = R.drawable.ic_feather),
+                                contentDescription = "Toggle Prabha Focus Mode",
+                                isToggled = isPrabhaMode
+                            )
+                        }
+                    }
                 }
             }
 
-            if (showDefaultLauncherPrompt && !isPrabhaMode) {
+            if (showDefaultLauncherPrompt && !isPrabhaMode && pagerState.currentPage == 1) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Box(modifier = Modifier.padding(horizontal = 24.dp)) {
                     DefaultLauncherBanner(
@@ -170,7 +193,7 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.height(14.dp))
                         ClockDisplay()
                         Text(
-                            text = "Prabha Mode — distractions hidden",
+                            text = "Prabha Mode — focus engaged",
                             color = theme.secondary,
                             fontSize = 11.sp,
                             letterSpacing = 1.5.sp,
@@ -182,7 +205,15 @@ fun HomeScreen(
                         HorizontalPager(
                             state = pagerState,
                             modifier = Modifier.weight(1f),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
+                            beyondViewportPageCount = 1,
+                            flingBehavior = PagerDefaults.flingBehavior(
+                                state = pagerState,
+                                snapAnimationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = Spring.StiffnessMedium
+                                )
+                            )
                         ) { page ->
                             when (page) {
                                 1 -> {
@@ -227,7 +258,7 @@ fun HomeScreen(
                 }
             }
 
-            // Bottom UI (Hidden in Prabha Mode and on Widget Page)
+            // Bottom UI
             AnimatedVisibility(
                 visible = !isPrabhaMode && pagerState.currentPage == 1,
                 enter = fadeIn() + slideInVertically { it },
@@ -246,9 +277,7 @@ fun HomeScreen(
                             .clip(RoundedCornerShape(16.dp))
                             .background(theme.surface)
                             .border(1.dp, theme.outline, RoundedCornerShape(16.dp))
-                            .clickable(
-                                onClickLabel = "Open App Drawer"
-                            ) { viewModel.setLauncherState(LauncherState.DRAWER) }
+                            .clickable { viewModel.setLauncherState(LauncherState.DRAWER) }
                             .padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -282,6 +311,37 @@ fun HomeScreen(
 }
 
 @Composable
+fun ArkaSettingsIcon(viewModel: HomeViewModel, theme: ColorScheme) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable { viewModel.setLauncherState(LauncherState.SETTINGS) }
+    ) {
+        Box(
+            modifier = Modifier
+                .size(50.dp)
+                .clip(CircleShape)
+                .background(theme.surface)
+                .border(1.dp, theme.outline, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Settings,
+                contentDescription = "Launcher Settings",
+                tint = theme.primary,
+                modifier = Modifier.size(26.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            "Arka Settings",
+            color = theme.onBackground,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+@Composable
 fun DraggableDock(
     viewModel: HomeViewModel,
     dockApps: List<InstalledApp>
@@ -290,12 +350,11 @@ fun DraggableDock(
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
     
-    // Key state for immediate visual feedback
     var currentList by remember(dockApps) { mutableStateOf(dockApps) }
     var draggedPkg by remember { mutableStateOf<String?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
-    
     val itemPositions = remember { mutableStateMapOf<String, Float>() }
 
     Row(
@@ -304,11 +363,7 @@ fun DraggableDock(
             .clip(RoundedCornerShape(28.dp))
             .background(theme.surface)
             .border(1.dp, theme.outline, RoundedCornerShape(28.dp))
-            .padding(horizontal = 20.dp, vertical = 14.dp)
-            .pointerInput(Unit) {
-                // EXCLUDE Background Settings: Consume long presses in dock row to prevent wallpaper menu
-                detectTapGestures(onLongPress = { }) 
-            },
+            .padding(horizontal = 20.dp, vertical = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(22.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -317,6 +372,8 @@ fun DraggableDock(
             if (app != null) {
                 key(app.packageName) {
                     val isDragging = draggedPkg == app.packageName
+                    val interactionSource = remember { MutableInteractionSource() }
+
                     Box(
                         modifier = Modifier
                             .onGloballyPositioned { layout ->
@@ -333,11 +390,14 @@ fun DraggableDock(
                             .pointerInput(app.packageName) {
                                 awaitEachGesture {
                                     val down = awaitFirstDown()
-                                    val timeout = viewConfiguration.longPressTimeoutMillis
+                                    val press = PressInteraction.Press(down.position)
+                                    scope.launch { interactionSource.emit(press) }
+
+                                    val timeout = viewConfiguration.longPressTimeoutMillis + 50L
                                     val slop = viewConfiguration.touchSlop
-                                    
                                     var isLongPress = false
-                                    var movedSignificantly = false
+                                    var totalMoved = 0f
+                                    var reorderActive = false
                                     
                                     try {
                                         withTimeout(timeout) {
@@ -345,7 +405,7 @@ fun DraggableDock(
                                                 val event = awaitPointerEvent()
                                                 val change = event.changes.first()
                                                 if (change.pressed.not()) {
-                                                    // RELEASE before timeout -> TAP
+                                                    scope.launch { interactionSource.emit(PressInteraction.Release(press)) }
                                                     val intent = context.packageManager.getLaunchIntentForPackage(app.packageName)
                                                     intent?.let {
                                                         it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -355,7 +415,7 @@ fun DraggableDock(
                                                     return@withTimeout
                                                 }
                                                 if ((change.position - down.position).getDistance() > slop) {
-                                                    // Cancel long press check if moved early
+                                                    scope.launch { interactionSource.emit(PressInteraction.Cancel(press)) }
                                                     return@withTimeout 
                                                 }
                                             }
@@ -366,17 +426,16 @@ fun DraggableDock(
 
                                     if (isLongPress) {
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        // User requested menu to show IMMEDIATELY after vibration
-                                        viewModel.showAppMenu(app)
                                         
                                         while (true) {
                                             val event = awaitPointerEvent()
                                             val change = event.changes.first()
-                                            
                                             if (change.pressed.not()) {
-                                                if (movedSignificantly) {
-                                                    // Commit to DB on release
+                                                scope.launch { interactionSource.emit(PressInteraction.Release(press)) }
+                                                if (reorderActive) {
                                                     viewModel.reorderDock(currentList.map { it.packageName })
+                                                } else {
+                                                    viewModel.showAppMenu(app)
                                                 }
                                                 draggedPkg = null
                                                 dragOffset = 0f
@@ -385,8 +444,13 @@ fun DraggableDock(
                                             }
 
                                             val xDelta = change.positionChange().x
-                                            if (xDelta != 0f) {
-                                                movedSignificantly = true
+                                            totalMoved += Math.abs(xDelta)
+                                            
+                                            if (totalMoved > slop) {
+                                                reorderActive = true
+                                            }
+
+                                            if (reorderActive && xDelta != 0f) {
                                                 draggedPkg = app.packageName
                                                 dragOffset += xDelta
                                                 change.consume()
@@ -399,18 +463,14 @@ fun DraggableDock(
                                                     if (idx != currentIdx) {
                                                         val otherPkg = currentList[idx].packageName
                                                         val otherCenterX = (itemPositions[otherPkg] ?: 0f) + (iconWidthPx / 2)
-                                                        
                                                         if ((currentIdx < idx && currentX > otherCenterX) || 
                                                             (currentIdx > idx && currentX < otherCenterX)) {
-                                                            
                                                             val newList = currentList.toMutableList()
                                                             Collections.swap(newList, currentIdx, idx)
                                                             currentList = newList
-                                                            
                                                             val oldPos = itemPositions[app.packageName] ?: 0f
                                                             val newPos = itemPositions[otherPkg] ?: 0f
                                                             dragOffset -= (newPos - oldPos)
-                                                            
                                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                                             break
                                                         }
@@ -422,7 +482,7 @@ fun DraggableDock(
                                 }
                             }
                     ) {
-                        AppIcon(packageName = app.packageName)
+                        AppIcon(packageName = app.packageName, interactionSource = interactionSource)
                     }
                 }
             } else {
@@ -481,14 +541,12 @@ fun ClockWidget() {
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val dateFormat = remember { SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()) }
     var currentTime by remember { mutableStateOf(Calendar.getInstance()) }
-    
     LaunchedEffect(Unit) {
         while (true) {
             currentTime = Calendar.getInstance()
             delay(1000)
         }
     }
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = theme.surface),
@@ -515,12 +573,10 @@ fun ClockWidget() {
     }
 }
 
-
 @Composable
 fun WidgetPage(viewModel: HomeViewModel) {
     val screenTime by viewModel.screenTime.collectAsState()
     val focusStreak by viewModel.focusStreak.collectAsState()
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -567,6 +623,14 @@ fun QuickAccessPage(viewModel: HomeViewModel) {
     val quickAccessApps by viewModel.quickAccessApps.collectAsState()
     val theme = MaterialTheme.colorScheme
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
+
+    var currentList by remember(quickAccessApps) { mutableStateOf(quickAccessApps) }
+    var draggedPkg by remember { mutableStateOf<String?>(null) }
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+    val itemPositions = remember { mutableStateMapOf<String, Offset>() }
 
     Column(
         modifier = Modifier
@@ -574,21 +638,7 @@ fun QuickAccessPage(viewModel: HomeViewModel) {
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            "Quick Access",
-            color = theme.secondary,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.2.sp
-        )
-        Text(
-            "Pinned for your convenience",
-            color = theme.onSurfaceVariant.copy(alpha = 0.7f),
-            fontSize = 11.sp
-        )
-        
         Spacer(modifier = Modifier.height(32.dp))
-
         if (quickAccessApps.isEmpty()) {
             Box(
                 modifier = Modifier
@@ -600,59 +650,132 @@ fun QuickAccessPage(viewModel: HomeViewModel) {
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Default.Add, 
-                        contentDescription = null, 
-                        tint = theme.outline,
-                        modifier = Modifier.size(32.dp)
-                    )
+                    Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = theme.outline, modifier = Modifier.size(32.dp))
                     Spacer(modifier = Modifier.height(12.dp))
                     Text("Long press apps in drawer to pin here", color = theme.outline, fontSize = 12.sp)
                 }
             }
         } else {
-            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-                columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(4),
-                modifier = Modifier.fillMaxSize().weight(1f),
-                verticalArrangement = Arrangement.spacedBy(28.dp),
-                horizontalArrangement = Arrangement.spacedBy(20.dp)
-            ) {
-                items(quickAccessApps.size) { index ->
-                    val app = quickAccessApps[index]
-                    
-                    // Simple staggered entrance animation
-                    val visible = remember { mutableStateOf(false) }
-                    LaunchedEffect(Unit) {
-                        delay(index * 40L)
-                        visible.value = true
-                    }
-
-                    AnimatedVisibility(
-                        visible = visible.value,
-                        enter = fadeIn(tween(400)) + scaleIn(initialScale = 0.8f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy))
+                    androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                        columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(4),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .weight(1f),
+                        contentPadding = PaddingValues(bottom = 80.dp),
+                        verticalArrangement = Arrangement.spacedBy(28.dp),
+                        horizontalArrangement = Arrangement.spacedBy(20.dp)
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.clickable {
-                                val intent = context.packageManager.getLaunchIntentForPackage(app.packageName)
-                                intent?.let { context.startActivity(it) }
+                items(currentList.size, key = { currentList[it].packageName }) { index ->
+                    val app = currentList[index]
+                    val isDragging = draggedPkg == app.packageName
+                    val interactionSource = remember { MutableInteractionSource() }
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .onGloballyPositioned { layout ->
+                                itemPositions[app.packageName] = layout.positionInParent()
                             }
-                        ) {
-                            AppIcon(
-                                packageName = app.packageName,
-                                size = 52.dp,
-                                onLongClick = { viewModel.showAppMenu(app) }
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                app.appName,
-                                color = theme.onSurface,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                            )
-                        }
+                            .zIndex(if (isDragging) 10f else 1f)
+                            .graphicsLayer {
+                                if (isDragging) {
+                                    translationX = dragOffset.x
+                                    translationY = dragOffset.y
+                                    scaleX = 1.2f
+                                    scaleY = 1.2f
+                                }
+                            }
+                            .pointerInput(app.packageName) {
+                                awaitEachGesture {
+                                    val down = awaitFirstDown()
+                                    val press = PressInteraction.Press(down.position)
+                                    scope.launch { interactionSource.emit(press) }
+
+                                    val timeout = viewConfiguration.longPressTimeoutMillis + 50L
+                                    val slop = viewConfiguration.touchSlop
+                                    var isLongPress = false
+                                    var totalMoved = Offset.Zero
+                                    var reorderActive = false
+                                    
+                                    try {
+                                        withTimeout(timeout) {
+                                            while (true) {
+                                                val event = awaitPointerEvent()
+                                                val change = event.changes.first()
+                                                if (change.pressed.not()) {
+                                                    scope.launch { interactionSource.emit(PressInteraction.Release(press)) }
+                                                    val intent = context.packageManager.getLaunchIntentForPackage(app.packageName)
+                                                    intent?.let { context.startActivity(it) }
+                                                    change.consume()
+                                                    return@withTimeout
+                                                }
+                                                if ((change.position - down.position).getDistance() > slop) {
+                                                    scope.launch { interactionSource.emit(PressInteraction.Cancel(press)) }
+                                                    return@withTimeout
+                                                }
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        isLongPress = true
+                                    }
+                                    if (isLongPress) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        while (true) {
+                                            val event = awaitPointerEvent()
+                                            val change = event.changes.first()
+                                            if (change.pressed.not()) {
+                                                scope.launch { interactionSource.emit(PressInteraction.Release(press)) }
+                                                if (reorderActive) viewModel.reorderQuickAccess(currentList.map { it.packageName })
+                                                else viewModel.showAppMenu(app)
+                                                draggedPkg = null
+                                                dragOffset = Offset.Zero
+                                                change.consume()
+                                                break
+                                            }
+                                            val delta = change.positionChange()
+                                            totalMoved += delta
+                                            
+                                            if (totalMoved.getDistance() > slop) {
+                                                reorderActive = true
+                                            }
+
+                                            if (reorderActive && delta != Offset.Zero) {
+                                                draggedPkg = app.packageName
+                                                dragOffset += delta
+                                                change.consume()
+                                                val currentIdx = currentList.indexOfFirst { it.packageName == app.packageName }
+                                                val itemPos = itemPositions[app.packageName] ?: Offset.Zero
+                                                val center = itemPos + dragOffset + Offset(with(density){26.dp.toPx()}, with(density){26.dp.toPx()})
+                                                for (i in currentList.indices) {
+                                                    if (i == currentIdx) continue
+                                                    val otherPkg = currentList[i].packageName
+                                                    val otherPos = itemPositions[otherPkg] ?: Offset.Zero
+                                                    val otherCenter = otherPos + Offset(with(density){26.dp.toPx()}, with(density){26.dp.toPx()})
+                                                    if ((center - otherCenter).getDistance() < with(density){42.dp.toPx()}) {
+                                                        val newList = currentList.toMutableList()
+                                                        Collections.swap(newList, currentIdx, i)
+                                                        currentList = newList
+                                                        dragOffset -= (otherPos - itemPos)
+                                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                        break
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                    ) {
+                        AppIcon(packageName = app.packageName, size = 52.dp, interactionSource = interactionSource)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            app.appName,
+                            color = theme.onSurface,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
                     }
                 }
             }
@@ -677,17 +800,8 @@ fun DefaultLauncherBanner(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Set Arka as your home screen",
-                    color = theme.onSurface,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = "Experience the full Konark theme",
-                    color = theme.onSurfaceVariant,
-                    fontSize = 12.sp
-                )
+                Text(text = "Set Arka as your home screen", color = theme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(text = "Experience the full Konark theme", color = theme.onSurfaceVariant, fontSize = 12.sp)
             }
             TextButton(onClick = onDismiss) {
                 Text("Dismiss", color = theme.onSurfaceVariant, fontSize = 13.sp)
@@ -707,31 +821,17 @@ fun DefaultLauncherBanner(
 fun ClockDisplay() {
     val theme = MaterialTheme.colorScheme
     var currentTime by remember { mutableStateOf(Calendar.getInstance()) }
-    
     LaunchedEffect(Unit) {
         while (true) {
             currentTime = Calendar.getInstance()
             delay(1000)
         }
     }
-
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val dateFormat = remember { SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()) }
-
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = timeFormat.format(currentTime.time),
-            color = theme.onBackground,
-            fontSize = 34.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 0.5.sp
-        )
-        Text(
-            text = dateFormat.format(currentTime.time).uppercase(),
-            color = theme.onSurfaceVariant,
-            fontSize = 10.sp,
-            letterSpacing = 1.5.sp
-        )
+        Text(text = timeFormat.format(currentTime.time), color = theme.onBackground, fontSize = 34.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
+        Text(text = dateFormat.format(currentTime.time).uppercase(), color = theme.onSurfaceVariant, fontSize = 10.sp, letterSpacing = 1.5.sp)
     }
 }
 
@@ -742,7 +842,6 @@ fun KonarkSilhouette(modifier: Modifier = Modifier) {
         val w = size.width
         val h = size.height
         val opacity = 0.05f
-
         val path = Path().apply {
             moveTo(w * 0.29f, h)
             lineTo(w * 0.32f, h * 0.77f)
@@ -759,15 +858,7 @@ fun KonarkSilhouette(modifier: Modifier = Modifier) {
             close()
         }
         drawPath(path, color = copper, alpha = opacity, style = Stroke(width = 1.4.dp.toPx()))
-        
-        drawRect(
-            color = copper,
-            topLeft = Offset(w * 0.26f, h * 0.97f),
-            size = androidx.compose.ui.geometry.Size(w * 0.48f, 4.dp.toPx()),
-            alpha = opacity,
-            style = Stroke(width = 1.dp.toPx())
-        )
-
+        drawRect(color = copper, topLeft = Offset(w * 0.26f, h * 0.97f), size = androidx.compose.ui.geometry.Size(w * 0.48f, 4.dp.toPx()), alpha = opacity, style = Stroke(width = 1.dp.toPx()))
         val centers = listOf(w * 0.39f, w * 0.5f, w * 0.61f)
         centers.forEach { cx ->
             val cy = h * 1.03f
@@ -777,13 +868,7 @@ fun KonarkSilhouette(modifier: Modifier = Modifier) {
                 val angle = (i / 8f) * 2 * Math.PI
                 val x2 = cx + r * sin(angle).toFloat()
                 val y2 = cy - r * cos(angle).toFloat()
-                drawLine(
-                    color = copper,
-                    start = Offset(cx, cy),
-                    end = Offset(x2, y2),
-                    alpha = opacity,
-                    strokeWidth = 0.6.dp.toPx()
-                )
+                drawLine(color = copper, start = Offset(cx, cy), end = Offset(x2, y2), alpha = opacity, strokeWidth = 0.6.dp.toPx())
             }
         }
     }
@@ -804,46 +889,20 @@ fun TopBarButton(
         animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy),
         label = "scale"
     )
-
     IconButton(
         onClick = onClick,
         interactionSource = interactionSource,
-        modifier = Modifier
-            .size(48.dp)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
+        modifier = Modifier.size(48.dp).graphicsLayer { scaleX = scale; scaleY = scale }
     ) {
         Box(
-            modifier = Modifier
-                .size(32.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(
-                    if (isToggled) theme.primaryContainer 
-                    else theme.surface.copy(alpha = 0.8f)
-                )
-                .border(
-                    1.dp, 
-                    if (isToggled) theme.primary.copy(alpha = 0.5f) 
-                    else theme.outline.copy(alpha = 0.5f), 
-                    RoundedCornerShape(12.dp)
-                ),
+            modifier = Modifier.size(32.dp).clip(RoundedCornerShape(12.dp))
+                .background(if (isToggled) theme.primaryContainer else theme.surface.copy(alpha = 0.8f))
+                .border(1.dp, if (isToggled) theme.primary.copy(alpha = 0.5f) else theme.outline.copy(alpha = 0.5f), RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center
         ) {
             when (icon) {
-                is ImageVector -> Icon(
-                    imageVector = icon,
-                    contentDescription = contentDescription,
-                    tint = if (isToggled) theme.primary else theme.onSurface,
-                    modifier = Modifier.size(18.dp)
-                )
-                is Painter -> Icon(
-                    painter = icon,
-                    contentDescription = contentDescription,
-                    tint = if (isToggled) theme.primary else theme.onSurface,
-                    modifier = Modifier.size(18.dp)
-                )
+                is ImageVector -> Icon(imageVector = icon, contentDescription = contentDescription, tint = if (isToggled) theme.primary else theme.onSurface, modifier = Modifier.size(18.dp))
+                is Painter -> Icon(painter = icon, contentDescription = contentDescription, tint = if (isToggled) theme.primary else theme.onSurface, modifier = Modifier.size(18.dp))
             }
         }
     }

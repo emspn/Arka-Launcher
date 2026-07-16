@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 enum class LauncherState {
-    HOME, DRAWER
+    HOME, DRAWER, SETTINGS
 }
 
 @HiltViewModel
@@ -36,6 +36,13 @@ class HomeViewModel @Inject constructor(
 
     private val _launcherState = MutableStateFlow(LauncherState.HOME)
     val launcherState: StateFlow<LauncherState> = _launcherState
+
+    private val _currentPage = MutableStateFlow(1)
+    val currentPage: StateFlow<Int> = _currentPage
+
+    fun setCurrentPage(page: Int) {
+        _currentPage.value = page
+    }
 
     private val _isPrabhaMode = MutableStateFlow(false)
     val isPrabhaMode: StateFlow<Boolean> = _isPrabhaMode
@@ -228,6 +235,12 @@ class HomeViewModel @Inject constructor(
     fun removeFromQuickAccess(packageName: String) {
         viewModelScope.launch {
             dockRepository.removeFromQuickAccess(packageName)
+        }
+    }
+
+    fun reorderQuickAccess(newPackages: List<String>) {
+        viewModelScope.launch {
+            dockRepository.reorderQuickAccess(newPackages)
         }
     }
 

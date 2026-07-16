@@ -54,6 +54,13 @@ class DockRepository @Inject constructor(
         }
     }
 
+    suspend fun reorderQuickAccess(newPackages: List<String>) {
+        val newString = newPackages.map { it.trim() }.filter { it.isNotEmpty() }.joinToString(",")
+        context.dataStore.edit { preferences ->
+            preferences[quickAccessKey] = newString
+        }
+    }
+
     val dockPackages: Flow<List<String>> = context.dataStore.data
         .map { preferences ->
             val packagesString = preferences[dockKey] ?: ""

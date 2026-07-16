@@ -16,20 +16,19 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.arka.launcher.ui.components.AppContextMenu
 import com.arka.launcher.ui.drawer.DrawerScreen
 import com.arka.launcher.ui.home.HomeScreen
-import com.arka.launcher.ui.home.HomeSettingsSheet
 import com.arka.launcher.ui.home.HomeViewModel
 import com.arka.launcher.ui.home.LauncherState
-import com.arka.launcher.ui.home.ThemePickerSheet
+import com.arka.launcher.ui.home.SettingsScreen
 import com.arka.launcher.ui.theme.ArkaTheme
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -38,9 +37,7 @@ class MainActivity : ComponentActivity() {
 
     private val requestRoleLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) { _ ->
-        // No-op, the ViewModel will re-check on next launch or we could trigger a check here
-    }
+    ) { _ -> }
 
     private fun openDefaultLauncherSettings() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -63,7 +60,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Log.d("ArkaMainActivity", "onCreate called")
         enableEdgeToEdge()
         setContent {
             val viewModel: HomeViewModel = hiltViewModel()
@@ -71,23 +67,20 @@ class MainActivity : ComponentActivity() {
             
             ArkaTheme(themeKey = themeKey) {
                 val launcherState by viewModel.launcherState.collectAsState()
-                val apps by viewModel.apps.collectAsState()
                 val selectedAppForMenu by viewModel.selectedAppForMenu.collectAsState()
-                val showHomeSettings by viewModel.showHomeSettings.collectAsState()
-                val showThemePicker by viewModel.showThemePicker.collectAsState()
                 val dockPackages by viewModel.dockPackages.collectAsState()
                 
-                Log.d("ArkaMainActivity", "launcherState: $launcherState, apps count: ${apps.size}")
+                val theme = MaterialTheme.colorScheme
 
-                BackHandler(enabled = launcherState == LauncherState.DRAWER) {
+                BackHandler(enabled = launcherState != LauncherState.HOME) {
                     viewModel.setLauncherState(LauncherState.HOME)
                 }
 
-                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                Box(modifier = Modifier.fillMaxSize().background(theme.background)) {
                     AnimatedContent(
                         targetState = launcherState,
                         transitionSpec = {
-                            if (targetState == LauncherState.DRAWER) {
+                            if (targetState == LauncherState.DRAWER || targetState == LauncherState.SETTINGS) {
                                 (fadeIn(animationSpec = tween(400)) + 
                                  slideInVertically(animationSpec = spring(stiffness = Spring.StiffnessLow)) { it / 2 } +
                                  scaleIn(initialScale = 0.85f, animationSpec = spring(stiffness = Spring.StiffnessLow)))
@@ -108,6 +101,7 @@ class MainActivity : ComponentActivity() {
                         when (state) {
                             LauncherState.HOME -> HomeScreen(viewModel, onSetDefaultLauncher = { openDefaultLauncherSettings() })
                             LauncherState.DRAWER -> DrawerScreen(viewModel)
+                            LauncherState.SETTINGS -> SettingsScreen(viewModel, onSetDefaultLauncher = { openDefaultLauncherSettings() })
                         }
                     }
                 }
@@ -116,9 +110,6 @@ class MainActivity : ComponentActivity() {
                     val app = selectedAppForMenu!!
                     val isPinned = dockPackages.any { it.trim().equals(app.packageName.trim(), ignoreCase = true) }
                     val isQuickAccess = viewModel.isAppQuickAccess(app.packageName)
-                    Log.d("ArkaMainActivity", "OPEN MENU for: [${app.packageName.trim()}]")
-                    Log.d("ArkaMainActivity", "Is Pinned Result: $isPinned")
-                    Log.d("ArkaMainActivity", "Current Dock List: ${dockPackages.map { "[$it]" }}")
 
                     AppContextMenu(
                         app = app,
@@ -127,10 +118,8 @@ class MainActivity : ComponentActivity() {
                         onDismiss = { viewModel.showAppMenu(null) },
                         onPinToggle = {
                             if (isPinned) {
-                                Log.d("ArkaMainActivity", "Removing ${app.packageName}")
                                 viewModel.unpinFromDock(app.packageName)
                             } else {
-                                Log.d("ArkaMainActivity", "Adding ${app.packageName}")
                                 viewModel.pinToDock(app.packageName)
                             }
                         },
@@ -141,23 +130,6 @@ class MainActivity : ComponentActivity() {
                                 viewModel.addToQuickAccess(app.packageName)
                             }
                         }
-                    )
-                }
-
-                if (showHomeSettings) {
-                    HomeSettingsSheet(
-                        onDismiss = { viewModel.showHomeSettings(false) },
-                        onSetDefaultLauncher = { openDefaultLauncherSettings() },
-                        onOpenThemePicker = { viewModel.showThemePicker(true) },
-                        currentThemeKey = themeKey
-                    )
-                }
-
-                if (showThemePicker) {
-                    ThemePickerSheet(
-                        currentThemeKey = themeKey,
-                        onThemeSelect = { viewModel.setTheme(it) },
-                        onDismiss = { viewModel.showThemePicker(false) }
                     )
                 }
             }

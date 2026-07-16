@@ -2,15 +2,16 @@ package com.arka.launcher.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,19 +25,13 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import coil.compose.AsyncImagePainter
-import coil.request.ImageRequest
-import androidx.compose.material3.Icon
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
 import coil.imageLoader
+import coil.request.ImageRequest
 import com.arka.launcher.ui.icon.AppIconData
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AppIcon(
     packageName: String,
@@ -44,6 +39,7 @@ fun AppIcon(
     contentDescription: String? = null,
     onClick: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
+    interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
     modifier: Modifier = Modifier
 ) {
     val theme = MaterialTheme.colorScheme
@@ -51,7 +47,6 @@ fun AppIcon(
     val context = LocalContext.current
     val sizePx = with(density) { size.toPx() }
 
-    val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     
     val scale by animateFloatAsState(
@@ -91,19 +86,7 @@ fun AppIcon(
                     radius = sizePx * 0.7f
                 )
             )
-            .border(1.dp, theme.outline, CircleShape)
-            .then(
-                if (onClick != null || onLongClick != null) {
-                    Modifier.combinedClickable(
-                        interactionSource = interactionSource,
-                        indication = null,
-                        onClick = onClick ?: {},
-                        onLongClick = onLongClick
-                    )
-                } else {
-                    Modifier
-                }
-            ),
+            .border(1.dp, theme.outline, CircleShape),
         contentAlignment = Alignment.Center
     ) {
         var isError by remember { mutableStateOf(false) }
@@ -122,8 +105,7 @@ fun AppIcon(
                 imageLoader = context.imageLoader,
                 modifier = Modifier.size(size * 0.65f),
                 contentScale = ContentScale.Fit,
-                onError = { state ->
-                    android.util.Log.e("ArkaIcon", "Coil failed for $packageName", state.result.throwable)
+                onError = { _ ->
                     isError = true
                 }
             )

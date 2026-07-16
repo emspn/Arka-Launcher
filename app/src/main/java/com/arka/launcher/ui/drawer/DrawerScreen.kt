@@ -9,6 +9,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -17,13 +19,12 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -31,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import com.arka.launcher.ui.components.AppIcon
 import com.arka.launcher.ui.home.HomeViewModel
 import com.arka.launcher.ui.home.LauncherState
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -183,29 +185,67 @@ fun DrawerScreen(viewModel: HomeViewModel) {
 
         // Alphabet Fast Scroll
         val alphabet = ('A'..'Z').toList() + '#'
+        var alphabetHeight by remember { mutableIntStateOf(0) }
+
         Column(
             modifier = Modifier
                 .align(Alignment.CenterEnd)
                 .padding(end = 4.dp)
-                .fillMaxHeight(),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            alphabet.forEach { char ->
-                Box(
-                    modifier = Modifier
-                        .size(width = 30.dp, height = 16.dp)
-                        .clickable {
-                            scope.launch {
+                .fillMaxHeight()
+                .onGloballyPositioned { alphabetHeight = it.size.height }
+                .pointerInput(groupedApps.keys) {
+                    coroutineScope {
+                        detectDragGestures(
+                            onDrag = { change, _ ->
+                                val y = change.position.y
+                                val index = ((y / alphabetHeight) * alphabet.size).toInt().coerceIn(0, alphabet.size - 1)
+                                val char = alphabet[index]
+                                
                                 val sections = groupedApps.keys.toList()
-                                val sectionIndex = sections.indexOf(char)
+                                val sectionIndex = if (char == '#') {
+                                    sections.indexOfFirst { it == '#' }
+                                } else {
+                                    sections.indexOfFirst { it != null && it.uppercaseChar() >= char && it != '#' }
+                                }
+
                                 if (sectionIndex != -1) {
                                     var itemIndex = 0
                                     for (i in 0 until sectionIndex) {
                                         val key = sections[i]
                                         itemIndex += (groupedApps[key]?.size ?: 0) + 1
                                     }
-                                    listState.animateScrollToItem(itemIndex)
+                                    // Use scrollToItem for instantaneous feedback during drag
+                                    launch { listState.scrollToItem(itemIndex) }
+                                }
+                            }
+                        )
+                    }
+                },
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            alphabet.forEach { char ->
+                Box(
+                    modifier = Modifier
+                        .size(width = 32.dp, height = 18.dp)
+                        .pointerInput(char) {
+                            detectTapGestures {
+                                scope.launch {
+                                    val sections = groupedApps.keys.toList()
+                                    val sectionIndex = if (char == '#') {
+                                        sections.indexOfFirst { it == '#' }
+                                    } else {
+                                        sections.indexOfFirst { it != null && it.uppercaseChar() >= char && it != '#' }
+                                    }
+
+                                    if (sectionIndex != -1) {
+                                        var itemIndex = 0
+                                        for (i in 0 until sectionIndex) {
+                                            val key = sections[i]
+                                            itemIndex += (groupedApps[key]?.size ?: 0) + 1
+                                        }
+                                        listState.animateScrollToItem(itemIndex)
+                                    }
                                 }
                             }
                         },
@@ -213,8 +253,8 @@ fun DrawerScreen(viewModel: HomeViewModel) {
                 ) {
                     Text(
                         text = char.toString(),
-                        color = theme.secondary.copy(alpha = 0.7f),
-                        fontSize = 9.sp,
+                        color = theme.secondary.copy(alpha = 0.8f),
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
