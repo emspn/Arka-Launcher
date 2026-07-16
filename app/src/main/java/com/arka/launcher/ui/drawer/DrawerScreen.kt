@@ -1,10 +1,6 @@
 package com.arka.launcher.ui.drawer
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
+import androidx.compose.animation.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -24,7 +20,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -45,6 +40,19 @@ fun DrawerScreen(viewModel: HomeViewModel) {
     val context = LocalContext.current
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+
+    // Pre-calculate mapping for alphabetical scroll to avoid heavy work in touch loop
+    val sectionIndices = remember(groupedApps) {
+        val mapping = mutableMapOf<Char, Int>()
+        var currentIndex = 0
+        groupedApps.keys.forEach { char ->
+            if (char != null) {
+                mapping[char.uppercaseChar()] = currentIndex
+                currentIndex += (groupedApps[char]?.size ?: 0) + 1
+            }
+        }
+        mapping
+    }
 
     Box(
         modifier = Modifier
@@ -133,7 +141,7 @@ fun DrawerScreen(viewModel: HomeViewModel) {
                                 .padding(vertical = 8.dp)
                         )
                     }
-                    items(apps, key = { it.packageName }) { app ->
+                    items(apps ?: emptyList(), key = { it.packageName }) { app ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -158,7 +166,6 @@ fun DrawerScreen(viewModel: HomeViewModel) {
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             
-                            // Highlighting search results
                             val name = app.appName
                             if (searchQuery.isNotEmpty() && name.contains(searchQuery, ignoreCase = true)) {
                                 val startIndex = name.lowercase().indexOf(searchQuery.lowercase())
@@ -187,7 +194,7 @@ fun DrawerScreen(viewModel: HomeViewModel) {
         // Alphabet Fast Scroll
         val alphabet = remember { ('A'..'Z').toList() + '#' }
         var alphabetHeight by remember { mutableIntStateOf(0) }
-        var scrollJob by remember { mutableStateOf<Job?>(null) }
+        var currentScrollJob by remember { mutableStateOf<Job?>(null) }
 
         Column(
             modifier = Modifier
@@ -195,32 +202,27 @@ fun DrawerScreen(viewModel: HomeViewModel) {
                 .padding(end = 4.dp)
                 .fillMaxHeight()
                 .onGloballyPositioned { alphabetHeight = it.size.height }
-                .pointerInput(groupedApps.keys) {
+                .pointerInput(sectionIndices) {
                     coroutineScope {
                         detectDragGestures(
                             onDrag = { change, _ ->
                                 val y = change.position.y
-                                val index = ((y / alphabetHeight) * alphabet.size).toInt().coerceIn(0, alphabet.size - 1)
+                                val fraction = (y / alphabetHeight).coerceIn(0f, 1f)
+                                val index = (fraction * (alphabet.size - 1)).toInt()
                                 val char = alphabet[index]
                                 
-                                val sections = groupedApps.keys.toList()
-                                val sectionIndex = if (char == '#') {
-                                    sections.indexOfFirst { it == '#' }
+                                val targetIndex = if (char == '#') {
+                                    sectionIndices['#'] ?: sectionIndices.values.lastOrNull() ?: 0
                                 } else {
-                                    sections.indexOfFirst { it != null && it.uppercaseChar() >= char && it != '#' }
+                                    // Find exact or next available letter
+                                    val available = sectionIndices.keys.filter { it != '#' }.sorted()
+                                    val targetChar = available.find { it >= char } ?: '#'
+                                    sectionIndices[targetChar] ?: 0
                                 }
 
-                                if (sectionIndex != -1) {
-                                    var itemIndex = 0
-                                    for (i in 0 until sectionIndex) {
-                                        val key = sections[i]
-                                        itemIndex += (groupedApps[key]?.size ?: 0) + 1
-                                    }
-                                    
-                                    scrollJob?.cancel()
-                                    scrollJob = launch { 
-                                        listState.scrollToItem(itemIndex) 
-                                    }
+                                currentScrollJob?.cancel()
+                                currentScrollJob = launch {
+                                    listState.scrollToItem(targetIndex)
                                 }
                             }
                         )
@@ -235,23 +237,16 @@ fun DrawerScreen(viewModel: HomeViewModel) {
                         .size(width = 32.dp, height = 18.dp)
                         .pointerInput(char) {
                             detectTapGestures {
-                                scrollJob?.cancel()
-                                scrollJob = scope.launch {
-                                    val sections = groupedApps.keys.toList()
-                                    val sectionIndex = if (char == '#') {
-                                        sections.indexOfFirst { it == '#' }
+                                currentScrollJob?.cancel()
+                                currentScrollJob = scope.launch {
+                                    val targetIndex = if (char == '#') {
+                                        sectionIndices['#'] ?: sectionIndices.values.lastOrNull() ?: 0
                                     } else {
-                                        sections.indexOfFirst { it != null && it.uppercaseChar() >= char && it != '#' }
+                                        val available = sectionIndices.keys.filter { it != '#' }.sorted()
+                                        val targetChar = available.find { it >= char } ?: '#'
+                                        sectionIndices[targetChar] ?: 0
                                     }
-
-                                    if (sectionIndex != -1) {
-                                        var itemIndex = 0
-                                        for (i in 0 until sectionIndex) {
-                                            val key = sections[i]
-                                            itemIndex += (groupedApps[key]?.size ?: 0) + 1
-                                        }
-                                        listState.animateScrollToItem(itemIndex)
-                                    }
+                                    listState.animateScrollToItem(targetIndex)
                                 }
                             }
                         },

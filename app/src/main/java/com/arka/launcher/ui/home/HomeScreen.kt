@@ -85,7 +85,6 @@ fun HomeScreen(
     val pagerState = rememberPagerState(initialPage = savedPage, pageCount = { 3 })
     val scope = rememberCoroutineScope()
 
-    // Persistent Pager State Sync
     LaunchedEffect(pagerState.currentPage) {
         viewModel.setCurrentPage(pagerState.currentPage)
     }
@@ -106,7 +105,6 @@ fun HomeScreen(
             .fillMaxSize()
             .pointerInput(isPrabhaMode) {
                 detectVerticalDragGestures { _, dragAmount ->
-                    // Swiping up to open drawer (Disabled in Prabha mode)
                     if (dragAmount < -25f && !isPrabhaMode) {
                         viewModel.setLauncherState(LauncherState.DRAWER)
                     }
@@ -122,7 +120,7 @@ fun HomeScreen(
                 .padding(vertical = 18.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Top Bar - Integrated with Prabha Mode logic
+            // Top Bar - Always visible in Prabha or Widget Page
             AnimatedVisibility(
                 visible = pagerState.currentPage == 0 || isPrabhaMode,
                 enter = fadeIn() + expandVertically(),
@@ -149,7 +147,6 @@ fun HomeScreen(
                         modifier = Modifier.align(Alignment.CenterEnd),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Settings icon is the only one in Prabha mode
                         TopBarButton(
                             onClick = { viewModel.setLauncherState(LauncherState.SETTINGS) },
                             icon = Icons.Rounded.Settings,
@@ -195,7 +192,7 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.height(14.dp))
                         ClockDisplay()
                         Text(
-                            text = "Focus Mode — Distractions Hidden",
+                            text = "Focus Mode Active",
                             color = theme.secondary,
                             fontSize = 11.sp,
                             letterSpacing = 1.5.sp,
@@ -212,7 +209,7 @@ fun HomeScreen(
                             state = pagerState,
                             snapAnimationSpec = spring(
                                 dampingRatio = Spring.DampingRatioNoBouncy,
-                                stiffness = Spring.StiffnessMedium
+                                stiffness = Spring.StiffnessHigh
                             )
                         )
                     ) { page ->
@@ -235,7 +232,7 @@ fun HomeScreen(
                 }
             }
 
-            // Bottom UI - Hidden in Prabha and other pages
+            // Bottom UI
             AnimatedVisibility(
                 visible = !isPrabhaMode && pagerState.currentPage == 1,
                 enter = fadeIn() + slideInVertically { it },
@@ -273,9 +270,7 @@ fun HomeScreen(
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
-
                     DraggableDock(viewModel = viewModel, dockApps = dockApps)
-                    
                     Spacer(modifier = Modifier.height(10.dp))
                 }
             }
@@ -321,7 +316,7 @@ fun DraggableDock(
                             .onGloballyPositioned { layout ->
                                 itemPositions[app.packageName] = layout.positionInParent().x
                             }
-                            .zIndex(if (isDragging) 10f else 1f)
+                            .zIndex(if (isDragging) 100f else 1f)
                             .graphicsLayer {
                                 if (isDragging) {
                                     translationX = dragOffset
@@ -338,8 +333,8 @@ fun DraggableDock(
                                     val timeout = viewConfiguration.longPressTimeoutMillis + 50L
                                     val slop = viewConfiguration.touchSlop
                                     var isLongPress = false
-                                    var totalMoved = 0f
                                     var reorderActive = false
+                                    var totalMovedX = 0f
                                     
                                     try {
                                         withTimeout(timeout) {
@@ -382,8 +377,8 @@ fun DraggableDock(
                                             }
 
                                             val xDelta = change.positionChange().x
-                                            totalMoved += Math.abs(xDelta)
-                                            if (totalMoved > slop) reorderActive = true
+                                            totalMovedX += Math.abs(xDelta)
+                                            if (totalMovedX > slop) reorderActive = true
 
                                             if (reorderActive && xDelta != 0f) {
                                                 draggedPkg = app.packageName
@@ -396,8 +391,7 @@ fun DraggableDock(
                                                     if (idx != currentIdx) {
                                                         val otherPkg = currentList[idx].packageName
                                                         val otherCenterX = (itemPositions[otherPkg] ?: 0f) + (iconWidthPx / 2)
-                                                        if ((currentIdx < idx && currentX > otherCenterX) || 
-                                                            (currentIdx > idx && currentX < otherCenterX)) {
+                                                        if ((currentIdx < idx && currentX > otherCenterX) || (currentIdx > idx && currentX < otherCenterX)) {
                                                             val newList = currentList.toMutableList()
                                                             Collections.swap(newList, currentIdx, idx)
                                                             currentList = newList
@@ -435,97 +429,6 @@ fun DraggableDock(
 }
 
 @Composable
-fun WeatherWidget() {
-    val theme = MaterialTheme.colorScheme
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = theme.surface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, theme.outline),
-        shape = RoundedCornerShape(22.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(18.dp, 20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Today", color = theme.onSurfaceVariant, fontSize = 11.sp, letterSpacing = 1.sp)
-                Text("28°C", color = theme.onSurface, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Text("Clear skies", color = theme.onSurfaceVariant, fontSize = 11.sp)
-            }
-            Icon(imageVector = Icons.Rounded.Cloud, contentDescription = "Weather: Clear skies", tint = theme.secondary, modifier = Modifier.size(30.dp))
-        }
-    }
-}
-
-@Composable
-fun ClockWidget() {
-    val theme = MaterialTheme.colorScheme
-    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-    val dateFormat = remember { SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()) }
-    var currentTime by remember { mutableStateOf(Calendar.getInstance()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            currentTime = Calendar.getInstance()
-            delay(1000)
-        }
-    }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = theme.surface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, theme.outline),
-        shape = RoundedCornerShape(22.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(18.dp, 20.dp).fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(text = timeFormat.format(currentTime.time), color = theme.onSurface, fontSize = 30.sp, fontWeight = FontWeight.Bold)
-            Text(text = dateFormat.format(currentTime.time).uppercase(), color = theme.onSurfaceVariant, fontSize = 10.sp, letterSpacing = 1.5.sp)
-        }
-    }
-}
-
-@Composable
-fun WidgetPage(viewModel: HomeViewModel) {
-    val screenTime by viewModel.screenTime.collectAsState()
-    val focusStreak by viewModel.focusStreak.collectAsState()
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Spacer(modifier = Modifier.height(20.dp))
-        WeatherWidget()
-        ClockWidget()
-        PrabhaStatsWidget(screenTime = screenTime, focusStreak = focusStreak)
-        DailyVerseWidget()
-        Spacer(modifier = Modifier.height(20.dp))
-    }
-}
-
-@Composable
-fun DailyVerseWidget() {
-    val theme = MaterialTheme.colorScheme
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = theme.surface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, theme.outline),
-        shape = RoundedCornerShape(22.dp)
-    ) {
-        Column(modifier = Modifier.padding(18.dp, 20.dp)) {
-            Text("Daily verse", color = theme.onSurfaceVariant, fontSize = 11.sp, letterSpacing = 1.sp)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("\"The sun never says to the earth, you owe me.\"", color = theme.onSurface, fontSize = 15.sp, fontStyle = FontStyle.Italic, lineHeight = 22.sp)
-            Text("— Rumi", color = theme.onSurfaceVariant, fontSize = 10.sp, modifier = Modifier.padding(top = 8.dp))
-        }
-    }
-}
-
-@Composable
 fun QuickAccessPage(viewModel: HomeViewModel) {
     val quickAccessApps by viewModel.quickAccessApps.collectAsState()
     val theme = MaterialTheme.colorScheme
@@ -540,22 +443,16 @@ fun QuickAccessPage(viewModel: HomeViewModel) {
     val itemPositions = remember { mutableStateMapOf<String, Offset>() }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
+        modifier = Modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(text = "Quick Access", color = theme.secondary, fontSize = 20.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
-        Text(text = "Pinned for your convenience", color = theme.onSurfaceVariant.copy(alpha = 0.7f), fontSize = 11.sp)
-        
+        Text(text = "Long press to reorder or manage", color = theme.onSurfaceVariant.copy(alpha = 0.7f), fontSize = 11.sp)
         Spacer(modifier = Modifier.height(32.dp))
         
         if (quickAccessApps.isEmpty()) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .weight(1f)
-                    .clip(RoundedCornerShape(32.dp))
+                modifier = Modifier.fillMaxSize().weight(1f).clip(RoundedCornerShape(32.dp))
                     .background(theme.surfaceVariant.copy(alpha = 0.3f))
                     .border(1.dp, theme.outline.copy(alpha = 0.2f), RoundedCornerShape(32.dp)),
                 contentAlignment = Alignment.Center
@@ -585,7 +482,7 @@ fun QuickAccessPage(viewModel: HomeViewModel) {
                             .onGloballyPositioned { layout ->
                                 itemPositions[app.packageName] = layout.positionInParent()
                             }
-                            .zIndex(if (isDragging) 10f else 1f)
+                            .zIndex(if (isDragging) 100f else 1f)
                             .graphicsLayer {
                                 if (isDragging) {
                                     translationX = dragOffset.x
@@ -603,8 +500,8 @@ fun QuickAccessPage(viewModel: HomeViewModel) {
                                     val timeout = viewConfiguration.longPressTimeoutMillis + 50L
                                     val slop = viewConfiguration.touchSlop
                                     var isLongPress = false
-                                    var totalMoved = Offset.Zero
                                     var reorderActive = false
+                                    var totalMoved = Offset.Zero
                                     
                                     try {
                                         withTimeout(timeout) {
@@ -614,10 +511,7 @@ fun QuickAccessPage(viewModel: HomeViewModel) {
                                                 if (change.pressed.not()) {
                                                     scope.launch { interactionSource.emit(PressInteraction.Release(press)) }
                                                     val intent = context.packageManager.getLaunchIntentForPackage(app.packageName)
-                                                    intent?.let {
-                                                        it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                                        context.startActivity(it)
-                                                    }
+                                                    intent?.let { context.startActivity(it) }
                                                     change.consume()
                                                     return@withTimeout
                                                 }
@@ -660,7 +554,7 @@ fun QuickAccessPage(viewModel: HomeViewModel) {
                                                     val otherPkg = currentList[i].packageName
                                                     val otherPos = itemPositions[otherPkg] ?: Offset.Zero
                                                     val otherCenter = otherPos + Offset(with(density){26.dp.toPx()}, with(density){26.dp.toPx()})
-                                                    if ((center - otherCenter).getDistance() < with(density){42.dp.toPx()}) {
+                                                    if ((center - otherCenter).getDistance() < with(density){45.dp.toPx()}) {
                                                         val newList = currentList.toMutableList()
                                                         Collections.swap(newList, currentIdx, i)
                                                         currentList = newList
@@ -686,33 +580,92 @@ fun QuickAccessPage(viewModel: HomeViewModel) {
 }
 
 @Composable
-fun DefaultLauncherBanner(
-    onSetDefault: () -> Unit,
-    onDismiss: () -> Unit
-) {
+fun WidgetPage(viewModel: HomeViewModel) {
+    val screenTime by viewModel.screenTime.collectAsState()
+    val focusStreak by viewModel.focusStreak.collectAsState()
+    Column(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp).verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.height(20.dp))
+        WeatherWidget()
+        ClockWidget()
+        PrabhaStatsWidget(screenTime = screenTime, focusStreak = focusStreak)
+        DailyVerseWidget()
+        Spacer(modifier = Modifier.height(20.dp))
+    }
+}
+
+@Composable
+fun WeatherWidget() {
     val theme = MaterialTheme.colorScheme
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = theme.surface),
         border = androidx.compose.foundation.BorderStroke(1.dp, theme.outline),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(22.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(modifier = Modifier.padding(18.dp, 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Today", color = theme.onSurfaceVariant, fontSize = 11.sp, letterSpacing = 1.sp)
+                Text("28°C", color = theme.onSurface, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("Clear skies", color = theme.onSurfaceVariant, fontSize = 11.sp)
+            }
+            Icon(imageVector = Icons.Rounded.Cloud, contentDescription = "Weather", tint = theme.secondary, modifier = Modifier.size(30.dp))
+        }
+    }
+}
+
+@Composable
+fun ClockWidget() {
+    val theme = MaterialTheme.colorScheme
+    var currentTime by remember { mutableStateOf(Calendar.getInstance()) }
+    LaunchedEffect(Unit) { while (true) { currentTime = Calendar.getInstance(); delay(1000) } }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = theme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, theme.outline),
+        shape = RoundedCornerShape(22.dp)
+    ) {
+        Column(modifier = Modifier.padding(18.dp, 20.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+            val dateFormat = SimpleDateFormat("EEEE, d MMMM", Locale.getDefault())
+            Text(text = timeFormat.format(currentTime.time), color = theme.onSurface, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+            Text(text = dateFormat.format(currentTime.time).uppercase(), color = theme.onSurfaceVariant, fontSize = 10.sp, letterSpacing = 1.5.sp)
+        }
+    }
+}
+
+@Composable
+fun DailyVerseWidget() {
+    val theme = MaterialTheme.colorScheme
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = theme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, theme.outline),
+        shape = RoundedCornerShape(22.dp)
+    ) {
+        Column(modifier = Modifier.padding(18.dp, 20.dp)) {
+            Text("Daily verse", color = theme.onSurfaceVariant, fontSize = 11.sp, letterSpacing = 1.sp)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("\"The sun never says to the earth, you owe me.\"", color = theme.onSurface, fontSize = 15.sp, fontStyle = FontStyle.Italic, lineHeight = 22.sp)
+            Text("— Rumi", color = theme.onSurfaceVariant, fontSize = 10.sp, modifier = Modifier.padding(top = 8.dp))
+        }
+    }
+}
+
+@Composable
+fun DefaultLauncherBanner(onSetDefault: () -> Unit, onDismiss: () -> Unit) {
+    val theme = MaterialTheme.colorScheme
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = theme.surface), border = androidx.compose.foundation.BorderStroke(1.dp, theme.outline), shape = RoundedCornerShape(16.dp)) {
+        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = "Set Arka as your home screen", color = theme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 Text(text = "Experience the full Konark theme", color = theme.onSurfaceVariant, fontSize = 12.sp)
             }
-            TextButton(onClick = onDismiss) {
-                Text("Dismiss", color = theme.onSurfaceVariant, fontSize = 13.sp)
-            }
-            Button(
-                onClick = onSetDefault,
-                colors = ButtonDefaults.buttonColors(containerColor = theme.primary),
-                shape = RoundedCornerShape(12.dp)
-            ) {
+            TextButton(onClick = onDismiss) { Text("Dismiss", color = theme.onSurfaceVariant, fontSize = 13.sp) }
+            Button(onClick = onSetDefault, colors = ButtonDefaults.buttonColors(containerColor = theme.primary), shape = RoundedCornerShape(12.dp)) {
                 Text("Set default", color = theme.background, fontSize = 13.sp)
             }
         }
@@ -723,12 +676,7 @@ fun DefaultLauncherBanner(
 fun ClockDisplay() {
     val theme = MaterialTheme.colorScheme
     var currentTime by remember { mutableStateOf(Calendar.getInstance()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            currentTime = Calendar.getInstance()
-            delay(1000)
-        }
-    }
+    LaunchedEffect(Unit) { while (true) { currentTime = Calendar.getInstance(); delay(1000) } }
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val dateFormat = remember { SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()) }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -745,63 +693,21 @@ fun KonarkSilhouette(modifier: Modifier = Modifier) {
         val h = size.height
         val opacity = 0.05f
         val path = Path().apply {
-            moveTo(w * 0.29f, h)
-            lineTo(w * 0.32f, h * 0.77f)
-            lineTo(w * 0.37f, h * 0.77f)
-            lineTo(w * 0.39f, h * 0.6f)
-            lineTo(w * 0.44f, h * 0.6f)
-            lineTo(w * 0.46f, h * 0.46f)
-            lineTo(w * 0.54f, h * 0.46f)
-            lineTo(w * 0.56f, h * 0.6f)
-            lineTo(w * 0.61f, h * 0.6f)
-            lineTo(w * 0.63f, h * 0.77f)
-            lineTo(w * 0.68f, h * 0.77f)
-            lineTo(w * 0.71f, h)
-            close()
+            moveTo(w * 0.29f, h); lineTo(w * 0.32f, h * 0.77f); lineTo(w * 0.37f, h * 0.77f); lineTo(w * 0.39f, h * 0.6f); lineTo(w * 0.44f, h * 0.6f); lineTo(w * 0.46f, h * 0.46f); lineTo(w * 0.54f, h * 0.46f); lineTo(w * 0.56f, h * 0.6f); lineTo(w * 0.61f, h * 0.6f); lineTo(w * 0.63f, h * 0.77f); lineTo(w * 0.68f, h * 0.77f); lineTo(w * 0.71f, h); close()
         }
         drawPath(path, color = copper, alpha = opacity, style = Stroke(width = 1.4.dp.toPx()))
         drawRect(color = copper, topLeft = Offset(w * 0.26f, h * 0.97f), size = androidx.compose.ui.geometry.Size(w * 0.48f, 4.dp.toPx()), alpha = opacity, style = Stroke(width = 1.dp.toPx()))
-        val centers = listOf(w * 0.39f, w * 0.5f, w * 0.61f)
-        centers.forEach { cx ->
-            val cy = h * 1.03f
-            val r = 9.dp.toPx()
-            drawCircle(color = copper, radius = r, center = Offset(cx, cy), alpha = opacity, style = Stroke(width = 1.dp.toPx()))
-            for (i in 0 until 8) {
-                val angle = (i / 8f) * 2 * Math.PI
-                val x2 = cx + r * sin(angle).toFloat()
-                val y2 = cy - r * cos(angle).toFloat()
-                drawLine(color = copper, start = Offset(cx, cy), end = Offset(x2, y2), alpha = opacity, strokeWidth = 0.6.dp.toPx())
-            }
-        }
     }
 }
 
 @Composable
-fun TopBarButton(
-    onClick: () -> Unit,
-    icon: Any,
-    contentDescription: String?,
-    isToggled: Boolean = false
-) {
+fun TopBarButton(onClick: () -> Unit, icon: Any, contentDescription: String?, isToggled: Boolean = false) {
     val theme = MaterialTheme.colorScheme
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.92f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy),
-        label = "scale"
-    )
-    IconButton(
-        onClick = onClick,
-        interactionSource = interactionSource,
-        modifier = Modifier.size(48.dp).graphicsLayer { scaleX = scale; scaleY = scale }
-    ) {
-        Box(
-            modifier = Modifier.size(32.dp).clip(RoundedCornerShape(12.dp))
-                .background(if (isToggled) theme.primaryContainer else theme.surface.copy(alpha = 0.8f))
-                .border(1.dp, if (isToggled) theme.primary.copy(alpha = 0.5f) else theme.outline.copy(alpha = 0.5f), RoundedCornerShape(12.dp)),
-            contentAlignment = Alignment.Center
-        ) {
+    val scale by animateFloatAsState(targetValue = if (isPressed) 0.92f else 1f, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy), label = "scale")
+    IconButton(onClick = onClick, interactionSource = interactionSource, modifier = Modifier.size(48.dp).graphicsLayer { scaleX = scale; scaleY = scale }) {
+        Box(modifier = Modifier.size(32.dp).clip(RoundedCornerShape(12.dp)).background(if (isToggled) theme.primaryContainer else theme.surface.copy(alpha = 0.8f)).border(1.dp, if (isToggled) theme.primary.copy(alpha = 0.5f) else theme.outline.copy(alpha = 0.5f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
             when (icon) {
                 is ImageVector -> Icon(imageVector = icon, contentDescription = contentDescription, tint = if (isToggled) theme.primary else theme.onSurface, modifier = Modifier.size(18.dp))
                 is Painter -> Icon(painter = icon, contentDescription = contentDescription, tint = if (isToggled) theme.primary else theme.onSurface, modifier = Modifier.size(18.dp))
