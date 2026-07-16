@@ -36,12 +36,13 @@ import kotlinx.coroutines.launch
 fun DrawerScreen(viewModel: HomeViewModel) {
     val groupedApps by viewModel.groupedApps.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    val iconStyle by viewModel.iconStyle.collectAsState()
+    val iconSize by viewModel.iconSize.collectAsState()
     val theme = MaterialTheme.colorScheme
     val context = LocalContext.current
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
-    // Pre-calculate mapping for alphabetical scroll to avoid heavy work in touch loop
     val sectionIndices = remember(groupedApps) {
         val mapping = mutableMapOf<Char, Int>()
         var currentIndex = 0
@@ -66,48 +67,27 @@ fun DrawerScreen(viewModel: HomeViewModel) {
                 .padding(top = 16.dp)
                 .pointerInput(Unit) {
                     detectVerticalDragGestures { _, dragAmount ->
-                        if (dragAmount > 25f) { // Swipe down to close
-                            viewModel.setLauncherState(LauncherState.HOME)
-                        }
+                        if (dragAmount > 25f) viewModel.setLauncherState(LauncherState.HOME)
                     }
                 }
         ) {
-            // Header
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Arka",
-                    color = theme.secondary,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 18.sp
-                )
-                TextButton(
-                    onClick = { viewModel.setLauncherState(LauncherState.HOME) }
-                ) {
+                Text("Arka", color = theme.secondary, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
+                TextButton(onClick = { viewModel.setLauncherState(LauncherState.HOME) }) {
                     Text("Close", color = theme.onBackground, fontSize = 11.sp)
                 }
             }
 
-            // Search Input
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { viewModel.onSearchQueryChange(it) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                 placeholder = { Text("Search Arka", fontSize = 13.sp) },
-                leadingIcon = { 
-                    Icon(
-                        imageVector = Icons.Default.Search, 
-                        contentDescription = "Search", 
-                        modifier = Modifier.size(14.dp)
-                    ) 
-                },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(14.dp)) },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = theme.surface,
                     unfocusedContainerColor = theme.surface,
@@ -122,7 +102,6 @@ fun DrawerScreen(viewModel: HomeViewModel) {
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // App List
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
@@ -135,10 +114,7 @@ fun DrawerScreen(viewModel: HomeViewModel) {
                             color = theme.onSurfaceVariant,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(theme.background)
-                                .padding(vertical = 8.dp)
+                            modifier = Modifier.fillMaxWidth().background(theme.background).padding(vertical = 8.dp)
                         )
                     }
                     items(apps ?: emptyList(), key = { it.packageName }) { app ->
@@ -148,13 +124,9 @@ fun DrawerScreen(viewModel: HomeViewModel) {
                                 .combinedClickable(
                                     onClick = {
                                         val intent = context.packageManager.getLaunchIntentForPackage(app.packageName)
-                                        if (intent != null) {
-                                            context.startActivity(intent)
-                                        }
+                                        intent?.let { context.startActivity(it) }
                                     },
-                                    onLongClick = {
-                                        viewModel.showAppMenu(app)
-                                    }
+                                    onLongClick = { viewModel.showAppMenu(app) }
                                 )
                                 .padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -162,7 +134,8 @@ fun DrawerScreen(viewModel: HomeViewModel) {
                             AppIcon(
                                 packageName = app.packageName, 
                                 size = 30.dp,
-                                contentDescription = "Launch ${app.appName}"
+                                style = iconStyle,
+                                sizeFactor = iconSize
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             
@@ -179,19 +152,14 @@ fun DrawerScreen(viewModel: HomeViewModel) {
                                         append(name.substring(endIndex))
                                     }.toAnnotatedString()
                                     Text(text = annotatedString, color = theme.onBackground, fontSize = 13.sp)
-                                } else {
-                                    Text(text = name, color = theme.onBackground, fontSize = 13.sp)
-                                }
-                            } else {
-                                Text(text = name, color = theme.onBackground, fontSize = 13.sp)
-                            }
+                                } else Text(text = name, color = theme.onBackground, fontSize = 13.sp)
+                            } else Text(text = name, color = theme.onBackground, fontSize = 13.sp)
                         }
                     }
                 }
             }
         }
 
-        // Alphabet Fast Scroll
         val alphabet = remember { ('A'..'Z').toList() + '#' }
         var alphabetHeight by remember { mutableIntStateOf(0) }
         var currentScrollJob by remember { mutableStateOf<Job?>(null) }
@@ -214,16 +182,13 @@ fun DrawerScreen(viewModel: HomeViewModel) {
                                 val targetIndex = if (char == '#') {
                                     sectionIndices['#'] ?: sectionIndices.values.lastOrNull() ?: 0
                                 } else {
-                                    // Find exact or next available letter
                                     val available = sectionIndices.keys.filter { it != '#' }.sorted()
                                     val targetChar = available.find { it >= char } ?: '#'
                                     sectionIndices[targetChar] ?: 0
                                 }
 
                                 currentScrollJob?.cancel()
-                                currentScrollJob = launch {
-                                    listState.scrollToItem(targetIndex)
-                                }
+                                currentScrollJob = launch { listState.scrollToItem(targetIndex) }
                             }
                         )
                     }

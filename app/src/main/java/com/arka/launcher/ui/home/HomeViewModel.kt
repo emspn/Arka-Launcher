@@ -102,6 +102,26 @@ class HomeViewModel @Inject constructor(
         initialValue = emptyList()
     )
 
+    val iconStyle = dockRepository.iconStyle.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = "natural"
+    )
+
+    val iconSize = dockRepository.iconSize.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = "normal"
+    )
+
+    fun setIconStyle(style: String) {
+        viewModelScope.launch { dockRepository.setIconStyle(style) }
+    }
+
+    fun setIconSize(size: String) {
+        viewModelScope.launch { dockRepository.setIconSize(size) }
+    }
+
     val isAppQuickAccess = { packageName: String ->
         quickAccessPackages.value.contains(packageName)
     }

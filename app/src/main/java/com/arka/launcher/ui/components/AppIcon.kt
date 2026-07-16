@@ -19,9 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -37,57 +35,69 @@ fun AppIcon(
     packageName: String,
     size: Dp = 46.dp,
     contentDescription: String? = null,
-    onClick: (() -> Unit)? = null,
-    onLongClick: (() -> Unit)? = null,
+    style: String = "natural",
+    sizeFactor: String = "normal",
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
     modifier: Modifier = Modifier
 ) {
     val theme = MaterialTheme.colorScheme
     val density = LocalDensity.current
     val context = LocalContext.current
-    val sizePx = with(density) { size.toPx() }
+
+    val factor = when (sizeFactor) {
+        "small" -> 0.85f
+        "large" -> 1.35f
+        else -> 1f
+    }
+    val adjustedSize = size * factor
+    val sizePx = with(density) { adjustedSize.toPx() }
 
     val isPressed by interactionSource.collectIsPressedAsState()
-    
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.93f else 1f,
-        animationSpec = spring(dampingRatio = 0.7f, stiffness = 400f),
+        animationSpec = spring(dampingRatio = 0.75f, stiffness = 400f),
         label = "press_scale"
     )
 
-    val request = remember(packageName) {
+    val request = remember(packageName, style) {
         ImageRequest.Builder(context)
-            .data(AppIconData(packageName))
+            .data(AppIconData(packageName, style))
             .crossfade(200)
-            .allowHardware(true) // Hardware bitmaps are faster for rendering
             .build()
     }
 
     Box(
         modifier = modifier
-            .size(size)
+            .size(adjustedSize)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
-            .shadow(
-                elevation = 8.dp,
-                shape = CircleShape,
-                ambientColor = Color.Black.copy(alpha = 0.35f),
-                spotColor = Color.Black.copy(alpha = 0.35f)
+            .then(
+                if (style == "natural") {
+                    Modifier.shadow(
+                        elevation = 6.dp,
+                        shape = CircleShape,
+                        ambientColor = Color.Black.copy(alpha = 0.3f),
+                        spotColor = Color.Black.copy(alpha = 0.3f)
+                    )
+                } else Modifier
             )
             .clip(CircleShape)
-            .background(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        theme.primary.copy(alpha = 0.2f),
-                        theme.surface
-                    ),
-                    center = Offset(sizePx * 0.32f, sizePx * 0.28f),
-                    radius = sizePx * 0.7f
-                )
-            )
-            .border(1.dp, theme.outline, CircleShape),
+            .then(
+                when (style) {
+                    "natural" -> Modifier.background(
+                        brush = Brush.radialGradient(
+                            colors = listOf(theme.primary.copy(alpha = 0.15f), theme.surface),
+                            center = Offset(sizePx * 0.3f, sizePx * 0.3f),
+                            radius = sizePx * 0.8f
+                        )
+                    ).border(1.dp, theme.outline.copy(alpha = 0.5f), CircleShape)
+                    "minimal" -> Modifier.background(theme.surface.copy(alpha = 0.45f))
+                        .border(1.5.dp, theme.primary.copy(alpha = 0.2f), CircleShape)
+                    else -> Modifier
+                }
+            ),
         contentAlignment = Alignment.Center
     ) {
         var isError by remember { mutableStateOf(false) }
@@ -97,18 +107,21 @@ fun AppIcon(
                 imageVector = Icons.Default.Info,
                 contentDescription = contentDescription,
                 tint = theme.primary,
-                modifier = Modifier.size(size * 0.5f)
+                modifier = Modifier.size(adjustedSize * 0.5f)
             )
         } else {
+            // THEMED TINT: We use the theme primary color for non-natural icons.
+            // Since the Fetcher now extracts a clean mask, this tint will look perfect.
+            val tintFilter = if (style != "natural") ColorFilter.tint(theme.primary) else null
+            
             AsyncImage(
                 model = request,
                 contentDescription = contentDescription,
                 imageLoader = context.imageLoader,
-                modifier = Modifier.size(size * 0.65f),
+                modifier = Modifier.size(adjustedSize * if (style == "ultraminimal") 0.85f else 0.72f),
                 contentScale = ContentScale.Fit,
-                onError = { _ ->
-                    isError = true
-                }
+                colorFilter = tintFilter,
+                onError = { isError = true }
             )
         }
     }

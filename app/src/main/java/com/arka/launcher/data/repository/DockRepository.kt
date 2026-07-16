@@ -27,6 +27,8 @@ class DockRepository @Inject constructor(
     private val streakKey = intPreferencesKey("focus_streak")
     private val lastFocusDateKey = longPreferencesKey("last_focus_date")
     private val quickAccessKey = stringPreferencesKey("quick_access_packages")
+    private val iconStyleKey = stringPreferencesKey("icon_style")
+    private val iconSizeKey = stringPreferencesKey("icon_size")
 
     val quickAccessPackages: Flow<List<String>> = context.dataStore.data
         .map { preferences ->
@@ -34,6 +36,20 @@ class DockRepository @Inject constructor(
                 ?.map { it.trim() }
                 ?.filter { it.isNotEmpty() } ?: emptyList()
         }
+
+    val iconStyle: Flow<String> = context.dataStore.data
+        .map { it[iconStyleKey] ?: "natural" }
+
+    val iconSize: Flow<String> = context.dataStore.data
+        .map { it[iconSizeKey] ?: "normal" }
+
+    suspend fun setIconStyle(style: String) {
+        context.dataStore.edit { it[iconStyleKey] = style }
+    }
+
+    suspend fun setIconSize(size: String) {
+        context.dataStore.edit { it[iconSizeKey] = size }
+    }
 
     suspend fun addToQuickAccess(packageName: String) {
         context.dataStore.edit { preferences ->

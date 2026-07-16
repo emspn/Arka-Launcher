@@ -34,6 +34,8 @@ fun SettingsScreen(
     val theme = MaterialTheme.colorScheme
     val currentThemeKey by viewModel.themeKey.collectAsState()
     val isPrabhaMode by viewModel.isPrabhaMode.collectAsState()
+    val iconStyle by viewModel.iconStyle.collectAsState()
+    val iconSize by viewModel.iconSize.collectAsState()
 
     Column(
         modifier = Modifier
@@ -94,6 +96,64 @@ fun SettingsScreen(
                                 fontSize = 12.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                 textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Text("Icon Style", fontSize = 12.sp, color = theme.onSurfaceVariant, modifier = Modifier.padding(bottom = 12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    listOf("natural", "minimal", "ultraminimal").forEach { style ->
+                        val isSelected = style == iconStyle
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(if (isSelected) theme.primary else theme.surface)
+                                .border(1.dp, if (isSelected) theme.primary else theme.outline.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                                .clickable { viewModel.setIconStyle(style) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = style.replaceFirstChar { it.uppercase() },
+                                color = if (isSelected) theme.onPrimary else theme.onSurface,
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Text("Icon Size", fontSize = 12.sp, color = theme.onSurfaceVariant, modifier = Modifier.padding(bottom = 12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    listOf("small", "normal", "large").forEach { size ->
+                        val isSelected = size == iconSize
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(if (isSelected) theme.primary else theme.surface)
+                                .border(1.dp, if (isSelected) theme.primary else theme.outline.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                                .clickable { viewModel.setIconSize(size) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = size.replaceFirstChar { it.uppercase() },
+                                color = if (isSelected) theme.onPrimary else theme.onSurface,
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                             )
                         }
                     }
