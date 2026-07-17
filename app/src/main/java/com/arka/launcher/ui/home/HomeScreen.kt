@@ -80,6 +80,7 @@ fun HomeScreen(
     val showDefaultLauncherPrompt by viewModel.showDefaultLauncherPrompt.collectAsState()
     val savedPage by viewModel.currentPage.collectAsState()
 
+    val haptic = LocalHapticFeedback.current
     val pagerState = rememberPagerState(initialPage = savedPage, pageCount = { 3 })
     val scope = rememberCoroutineScope()
 
@@ -129,6 +130,17 @@ fun HomeScreen(
                         viewModel.setLauncherState(LauncherState.DRAWER)
                     }
                 }
+            }
+            .pointerInput(isPrabhaMode) {
+                detectTapGestures(
+                    onDoubleTap = {
+                        // Double tap to sleep logic
+                        // This usually requires accessibility service or Device Admin for actual screen off,
+                        // but we can provide the "hook" or use a transparent overlay.
+                        // For now, let's trigger a haptic feedback to show it's recognized.
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    }
+                )
             }
     ) {
         KonarkSilhouette(modifier = Modifier.align(Alignment.BottomCenter))
@@ -579,9 +591,54 @@ fun WeatherWidget() {
 @Composable
 fun ClockWidget() {
     val theme = MaterialTheme.colorScheme
+    val context = LocalContext.current
     var currentTime by remember { mutableStateOf(Calendar.getInstance()) }
     LaunchedEffect(Unit) { while (true) { currentTime = Calendar.getInstance(); delay(1000) } }
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = theme.surface), border = androidx.compose.foundation.BorderStroke(1.dp, theme.outline), shape = RoundedCornerShape(22.dp)) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                val clockIntents = listOf(
+                    Intent(android.provider.AlarmClock.ACTION_SHOW_ALARMS),
+                    Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage("com.google.android.deskclock"),
+                    Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage("com.android.deskclock"),
+                    Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage("com.miui.calculator"), // Xiaomi often bundles it
+                    Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage("com.sec.android.app.clockpackage") // Samsung
+                )
+                
+                var launched = false
+                for (intent in clockIntents) {
+                    try {
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(intent)
+                        launched = true
+                        break
+                    } catch (e: Exception) {
+                        continue
+                    }
+                }
+                
+                if (!launched) {
+                    // Final fallback: try to find anything that handles alarms
+                    try {
+                        val intent = Intent(android.provider.AlarmClock.ACTION_SET_ALARM)
+                        val resolveInfo = context.packageManager.resolveActivity(intent, 0)
+                        if (resolveInfo != null) {
+                            val launchIntent = context.packageManager.getLaunchIntentForPackage(resolveInfo.activityInfo.packageName)
+                            launchIntent?.let { 
+                                it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                context.startActivity(it)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("ArkaHome", "Could not find clock app", e)
+                    }
+                }
+            },
+        colors = CardDefaults.cardColors(containerColor = theme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, theme.outline),
+        shape = RoundedCornerShape(22.dp)
+    ) {
         Column(modifier = Modifier.padding(18.dp, 20.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
             val dateFormat = SimpleDateFormat("EEEE, d MMMM", Locale.getDefault())
@@ -594,11 +651,28 @@ fun ClockWidget() {
 @Composable
 fun DailyVerseWidget() {
     val theme = MaterialTheme.colorScheme
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = theme.surface), border = androidx.compose.foundation.BorderStroke(1.dp, theme.outline), shape = RoundedCornerShape(22.dp)) {
+    val verses = remember {
+        listOf(
+            "The sun never says to the earth, 'you owe me.'" to "Rumi",
+            "Even the sun directs our gaze away from itself and to the life illumined by it." to "Eberhard Arnold",
+            "Keep your face to the sunshine and you cannot see a shadow." to "Helen Keller",
+            "Truth is like the sun. You can shut it out for a time, but it ain't goin' away." to "Elvis Presley",
+            "Turn your face to the sun and the shadows fall behind you." to "Maori Proverb"
+        )
+    }
+    val verse = remember { verses.random() }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = theme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, theme.outline),
+        shape = RoundedCornerShape(22.dp)
+    ) {
         Column(modifier = Modifier.padding(18.dp, 20.dp)) {
             Text("Daily verse", color = theme.onSurfaceVariant, fontSize = 11.sp, letterSpacing = 1.sp)
-            Spacer(modifier = Modifier.height(8.dp)); Text("\"The sun never says to the earth, you owe me.\"", color = theme.onSurface, fontSize = 15.sp, fontStyle = FontStyle.Italic, lineHeight = 22.sp)
-            Text("— Rumi", color = theme.onSurfaceVariant, fontSize = 10.sp, modifier = Modifier.padding(top = 8.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("\"${verse.first}\"", color = theme.onSurface, fontSize = 15.sp, fontStyle = FontStyle.Italic, lineHeight = 22.sp)
+            Text("— ${verse.second}", color = theme.onSurfaceVariant, fontSize = 10.sp, modifier = Modifier.padding(top = 8.dp))
         }
     }
 }

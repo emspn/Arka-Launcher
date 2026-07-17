@@ -12,16 +12,24 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.arka.launcher.ui.components.AppIcon
@@ -40,8 +48,19 @@ fun DrawerScreen(viewModel: HomeViewModel) {
     val iconSize by viewModel.iconSize.collectAsState()
     val theme = MaterialTheme.colorScheme
     val context = LocalContext.current
+    val view = androidx.compose.ui.platform.LocalView.current
+    val haptic = LocalHapticFeedback.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        // Small delay to ensure transition animation starts before keyboard pops up
+        kotlinx.coroutines.delay(300)
+        focusRequester.requestFocus()
+    }
 
     // High-performance index mapping
     val sectionIndices = remember(groupedApps) {
@@ -86,7 +105,10 @@ fun DrawerScreen(viewModel: HomeViewModel) {
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { viewModel.onSearchQueryChange(it) },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .focusRequester(focusRequester),
                 placeholder = { Text("Search Arka", fontSize = 13.sp) },
                 leadingIcon = { Icon(Icons.Default.Search, null, modifier = Modifier.size(14.dp)) },
                 colors = OutlinedTextFieldDefaults.colors(
@@ -98,7 +120,22 @@ fun DrawerScreen(viewModel: HomeViewModel) {
                     unfocusedTextColor = theme.onSurface
                 ),
                 shape = MaterialTheme.shapes.medium,
-                singleLine = true
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(
+                    onSearch = {
+                        val firstApp = groupedApps.values.firstOrNull()?.firstOrNull()
+                        if (firstApp != null) {
+                            val intent = context.packageManager.getLaunchIntentForPackage(firstApp.packageName)
+                            intent?.let { 
+                                it.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                context.startActivity(it)
+                                viewModel.setLauncherState(LauncherState.HOME)
+                            }
+                        }
+                        keyboardController?.hide()
+                    }
+                )
             )
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -180,6 +217,8 @@ fun DrawerScreen(viewModel: HomeViewModel) {
                                 
                                 if (char != lastTargetChar) {
                                     lastTargetChar = char
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    view.playSoundEffect(android.view.SoundEffectConstants.CLICK)
                                     val targetIndex = if (char == '#') {
                                         sectionIndices['#'] ?: sectionIndices.values.lastOrNull() ?: 0
                                     } else {
