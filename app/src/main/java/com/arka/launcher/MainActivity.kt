@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -58,8 +59,36 @@ class MainActivity : ComponentActivity() {
         startActivity(intent)
     }
 
+    private fun setHighRefreshRate() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val display = display ?: return
+                val modes = display.supportedModes
+                if (modes.isEmpty()) return
+
+                val maxRefreshRateMode = modes.maxByOrNull { it.refreshRate } ?: return
+
+                val params = window.attributes
+                params.preferredDisplayModeId = maxRefreshRateMode.modeId
+                window.attributes = params
+                Log.d("ArkaRefresh", "Set refresh rate to: ${maxRefreshRateMode.refreshRate}Hz (Mode ${maxRefreshRateMode.modeId})")
+            } else {
+                val params = window.attributes
+                @Suppress("DEPRECATION")
+                val display = windowManager.defaultDisplay
+                val maxRate = display.supportedModes.maxByOrNull { it.refreshRate }?.refreshRate ?: 60f
+                params.preferredRefreshRate = maxRate
+                window.attributes = params
+                Log.d("ArkaRefresh", "Set legacy refresh rate to: $maxRate Hz")
+            }
+        } catch (e: Exception) {
+            Log.e("ArkaRefresh", "Failed to set refresh rate", e)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setHighRefreshRate()
         enableEdgeToEdge()
         setContent {
             val viewModel: HomeViewModel = hiltViewModel()
@@ -81,19 +110,19 @@ class MainActivity : ComponentActivity() {
                         targetState = launcherState,
                         transitionSpec = {
                             if (targetState == LauncherState.DRAWER || targetState == LauncherState.SETTINGS) {
-                                (fadeIn(animationSpec = tween(400)) + 
-                                 slideInVertically(animationSpec = spring(stiffness = Spring.StiffnessLow)) { it / 2 } +
-                                 scaleIn(initialScale = 0.85f, animationSpec = spring(stiffness = Spring.StiffnessLow)))
+                                (fadeIn(animationSpec = tween(300)) + 
+                                 slideInVertically(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)) { it / 4 } +
+                                 scaleIn(initialScale = 0.92f, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)))
                                 .togetherWith(
-                                 fadeOut(animationSpec = tween(300)) + 
-                                 scaleOut(targetScale = 1.1f, animationSpec = tween(300)))
+                                 fadeOut(animationSpec = tween(250)) + 
+                                 scaleOut(targetScale = 1.08f, animationSpec = tween(250)))
                             } else {
-                                (fadeIn(animationSpec = tween(400)) + 
-                                 scaleIn(initialScale = 1.1f, animationSpec = spring(stiffness = Spring.StiffnessLow)))
+                                (fadeIn(animationSpec = tween(300)) + 
+                                 scaleIn(initialScale = 1.08f, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)))
                                 .togetherWith(
-                                 fadeOut(animationSpec = tween(300)) + 
-                                 slideOutVertically(animationSpec = spring(stiffness = Spring.StiffnessLow)) { it / 2 } +
-                                 scaleOut(targetScale = 0.85f, animationSpec = tween(300)))
+                                 fadeOut(animationSpec = tween(250)) + 
+                                 slideOutVertically(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)) { it / 4 } +
+                                 scaleOut(targetScale = 0.92f, animationSpec = tween(250)))
                             }
                         },
                         label = "launcher_transition"

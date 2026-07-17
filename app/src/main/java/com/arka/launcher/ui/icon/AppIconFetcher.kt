@@ -39,17 +39,18 @@ class AppIconFetcher(
         val pm = context.packageManager
         return try {
             val appInfo = pm.getApplicationInfo(packageName, 0)
-            var originalDrawable = pm.getApplicationIcon(appInfo)
+            val originalDrawable = pm.getApplicationIcon(appInfo)
             
             val size = 192
-            val finalBitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(finalBitmap)
+            val finalBitmap: Bitmap
 
             if (style == "natural") {
+                finalBitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(finalBitmap)
                 originalDrawable.setBounds(0, 0, size, size)
                 originalDrawable.draw(canvas)
             } else {
-                // THEMED ICON PRODUCTION EXTRACTION
+                // THEMED EXTRACTION ENGINE
                 var layer: Drawable? = null
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && originalDrawable is AdaptiveIconDrawable) {
                     layer = if (android.os.Build.VERSION.SDK_INT >= 33) originalDrawable.monochrome else null
@@ -63,44 +64,8 @@ class AppIconFetcher(
                 layer?.setBounds(0, 0, size, size)
                 layer?.draw(tempCanvas)
 
-                // The Magic: Extract only the logo based on contrast and brightness
-                val paint = Paint().apply {
-                    colorFilter = ColorMatrixColorFilter(ColorMatrix().apply {
-                        // Greyscale conversion first
-                        setSaturation(0f)
-                        // Then move intensity to alpha channel and boost contrast
-                        val scale = 2f
-                        val translate = -100f
-                        val m = arrayListOf(
-                            1f, 1f, 1f, 0f, 0f,
-                            1f, 1f, 1f, 0f, 0f,
-                            1f, 1f, 1f, 0f, 0f,
-                            0.33f, 0.59f, 0.11f, 0f, -60f // Sensitivity threshold
-                        ).toFloatArray()
-                        set(m)
-                    })
-                }
-                
-                canvas.drawBitmap(tempBitmap, 0f, 0f, paint)
-                
-                // If the extraction resulted in a mostly transparent bitmap, 
-                // the icon logo was likely dark. We invert the logic.
-                if (isBitmapMostlyEmpty(finalBitmap)) {
-                    val invertPaint = Paint().apply {
-                        colorFilter = ColorMatrixColorFilter(ColorMatrix().apply {
-                            setSaturation(0f)
-                            val m = arrayListOf(
-                                1f, 1f, 1f, 0f, 0f,
-                                1f, 1f, 1f, 0f, 0f,
-                                1f, 1f, 1f, 0f, 0f,
-                                -0.33f, -0.59f, -0.11f, 0f, 200f // Inverted threshold
-                            ).toFloatArray()
-                            set(m)
-                        })
-                    }
-                    canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
-                    canvas.drawBitmap(tempBitmap, 0f, 0f, invertPaint)
-                }
+                // Production-Grade Robust Extraction
+                finalBitmap = performRobustExtraction(tempBitmap)
             }
             
             iconCache.put(cacheKey, finalBitmap)
@@ -116,30 +81,91 @@ class AppIconFetcher(
         }
     }
 
-    private fun isBitmapMostlyEmpty(bitmap: Bitmap): Boolean {
-        var opaquePixels = 0
-        val sampleSize = 10
-        for (x in 0 until bitmap.width step sampleSize) {
-            for (y in 0 until bitmap.height step sampleSize) {
-                if (Color.alpha(bitmap.getPixel(x, y)) > 30) {
-                    opaquePixels++
+    private fun performRobustExtraction(src: Bitmap): Bitmap {
+        val size = src.width
+        val output = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        
+        // 1. Analyze border pixels to detect solid background containers
+        val perimeter = mutableListOf<Int>()
+        for (i in 0 until size step 10) {
+            perimeter.add(src.getPixel(i, 2))
+            perimeter.add(src.getPixel(i, size - 3))
+            perimeter.add(src.getPixel(2, i))
+            perimeter.add(src.getPixel(size - 3, i))
+        }
+        
+        var avgR = 0L; var avgG = 0L; var avgB = 0L; var avgA = 0L
+        for (p in perimeter) {
+            avgR += Color.red(p); avgG += Color.green(p); avgB += Color.blue(p); avgA += Color.alpha(p)
+        }
+        val meanR = (avgR / perimeter.size).toInt()
+        val meanG = (avgG / perimeter.size).toInt()
+        val meanB = (avgB / perimeter.size).toInt()
+        val meanA = (avgA / perimeter.size).toInt()
+
+        var logoPixelCount = 0
+        
+        for (x in 0 until size) {
+            for (y in 0 until size) {
+                val p = src.getPixel(x, y)
+                val pA = Color.alpha(p)
+                
+                if (pA < 40) {
+                    output.setPixel(x, y, Color.TRANSPARENT)
+                    continue
+                }
+
+                // If icon has a solid border (like Chrome/ChatGPT white backgrounds)
+                if (meanA > 200) {
+                    val diff = Math.abs(Color.red(p) - meanR) + 
+                               Math.abs(Color.green(p) - meanG) + 
+                               Math.abs(Color.blue(p) - meanB)
+                    
+                    if (diff > 45) { // Significant difference from background
+                        output.setPixel(x, y, Color.WHITE)
+                        logoPixelCount++
+                    } else {
+                        output.setPixel(x, y, Color.TRANSPARENT)
+                    }
+                } else {
+                    // Transparent-style foreground (ideal), use luminance
+                    val brightness = (Color.red(p) * 0.299 + Color.green(p) * 0.587 + Color.blue(p) * 0.114).toInt()
+                    if (brightness > 25) {
+                        output.setPixel(x, y, Color.WHITE)
+                        logoPixelCount++
+                    } else {
+                        output.setPixel(x, y, Color.TRANSPARENT)
+                    }
                 }
             }
         }
-        // If less than 1% of the sampled area is opaque, it's considered empty/failed extraction
-        val totalSamples = (bitmap.width / sampleSize) * (bitmap.height / sampleSize)
-        return (opaquePixels.toFloat() / totalSamples.toFloat()) < 0.01f
+
+        // Final Recovery Pass: If the icon is inverted (logo is darker than background)
+        // or if our extraction was too aggressive, use a high-contrast luminance stencil.
+        if (logoPixelCount < (size * size * 0.005)) {
+            for (x in 0 until size) {
+                for (y in 0 until size) {
+                    val p = src.getPixel(x, y)
+                    if (Color.alpha(p) > 50) {
+                        val brightness = (Color.red(p) * 0.299 + Color.green(p) * 0.587 + Color.blue(p) * 0.114).toInt()
+                        // If center is dark and background is light (Amazon style), invert.
+                        if (meanR > 200 && brightness < 150) {
+                            output.setPixel(x, y, Color.WHITE)
+                        } else if (meanR < 50 && brightness > 100) {
+                            output.setPixel(x, y, Color.WHITE)
+                        }
+                    }
+                }
+            }
+        }
+        
+        return output
     }
 
     class Factory(private val context: Context) : Fetcher.Factory<Any> {
         override fun create(data: Any, options: Options, imageLoader: ImageLoader): Fetcher? {
             val (packageName, style) = when (data) {
                 is AppIconData -> data.packageName to data.style
-                is String -> {
-                    if (data.startsWith("app-icon://")) {
-                        data.substringAfter("app-icon://").substringBefore("?") to "natural"
-                    } else null to "natural"
-                }
                 else -> null to "natural"
             }
             return if (packageName != null) AppIconFetcher(packageName, style, context) else null

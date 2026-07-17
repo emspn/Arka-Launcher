@@ -43,6 +43,7 @@ fun DrawerScreen(viewModel: HomeViewModel) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
+    // High-performance index mapping
     val sectionIndices = remember(groupedApps) {
         val mapping = mutableMapOf<Char, Int>()
         var currentIndex = 0
@@ -87,7 +88,7 @@ fun DrawerScreen(viewModel: HomeViewModel) {
                 onValueChange = { viewModel.onSearchQueryChange(it) },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                 placeholder = { Text("Search Arka", fontSize = 13.sp) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(14.dp)) },
+                leadingIcon = { Icon(Icons.Default.Search, null, modifier = Modifier.size(14.dp)) },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = theme.surface,
                     unfocusedContainerColor = theme.surface,
@@ -131,12 +132,7 @@ fun DrawerScreen(viewModel: HomeViewModel) {
                                 .padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            AppIcon(
-                                packageName = app.packageName, 
-                                size = 30.dp,
-                                style = iconStyle,
-                                sizeFactor = iconSize
-                            )
+                            AppIcon(packageName = app.packageName, size = 30.dp, style = iconStyle, sizeFactor = iconSize)
                             Spacer(modifier = Modifier.width(12.dp))
                             
                             val name = app.appName
@@ -160,9 +156,11 @@ fun DrawerScreen(viewModel: HomeViewModel) {
             }
         }
 
+        // Optimized Alphabet Sidebar
         val alphabet = remember { ('A'..'Z').toList() + '#' }
         var alphabetHeight by remember { mutableIntStateOf(0) }
-        var currentScrollJob by remember { mutableStateOf<Job?>(null) }
+        var lastTargetChar by remember { mutableStateOf<Char?>(null) }
+        var scrollJob by remember { mutableStateOf<Job?>(null) }
 
         Column(
             modifier = Modifier
@@ -173,22 +171,25 @@ fun DrawerScreen(viewModel: HomeViewModel) {
                 .pointerInput(sectionIndices) {
                     coroutineScope {
                         detectDragGestures(
+                            onDragStart = { lastTargetChar = null },
                             onDrag = { change, _ ->
                                 val y = change.position.y
                                 val fraction = (y / alphabetHeight).coerceIn(0f, 1f)
                                 val index = (fraction * (alphabet.size - 1)).toInt()
                                 val char = alphabet[index]
                                 
-                                val targetIndex = if (char == '#') {
-                                    sectionIndices['#'] ?: sectionIndices.values.lastOrNull() ?: 0
-                                } else {
-                                    val available = sectionIndices.keys.filter { it != '#' }.sorted()
-                                    val targetChar = available.find { it >= char } ?: '#'
-                                    sectionIndices[targetChar] ?: 0
+                                if (char != lastTargetChar) {
+                                    lastTargetChar = char
+                                    val targetIndex = if (char == '#') {
+                                        sectionIndices['#'] ?: sectionIndices.values.lastOrNull() ?: 0
+                                    } else {
+                                        val available = sectionIndices.keys.filter { it != '#' }.sorted()
+                                        val targetChar = available.find { it >= char } ?: '#'
+                                        sectionIndices[targetChar] ?: 0
+                                    }
+                                    scrollJob?.cancel()
+                                    scrollJob = launch { listState.scrollToItem(targetIndex) }
                                 }
-
-                                currentScrollJob?.cancel()
-                                currentScrollJob = launch { listState.scrollToItem(targetIndex) }
                             }
                         )
                     }
@@ -202,8 +203,8 @@ fun DrawerScreen(viewModel: HomeViewModel) {
                         .size(width = 32.dp, height = 18.dp)
                         .pointerInput(char) {
                             detectTapGestures {
-                                currentScrollJob?.cancel()
-                                currentScrollJob = scope.launch {
+                                scrollJob?.cancel()
+                                scrollJob = scope.launch {
                                     val targetIndex = if (char == '#') {
                                         sectionIndices['#'] ?: sectionIndices.values.lastOrNull() ?: 0
                                     } else {
@@ -217,12 +218,7 @@ fun DrawerScreen(viewModel: HomeViewModel) {
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = char.toString(),
-                        color = theme.secondary.copy(alpha = 0.8f),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text(text = char.toString(), color = theme.secondary.copy(alpha = 0.8f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

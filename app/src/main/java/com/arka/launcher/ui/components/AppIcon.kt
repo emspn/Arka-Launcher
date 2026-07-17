@@ -94,7 +94,7 @@ fun AppIcon(
                         )
                     ).border(1.dp, theme.outline.copy(alpha = 0.5f), CircleShape)
                     "minimal" -> Modifier.background(theme.surface.copy(alpha = 0.45f))
-                        .border(1.5.dp, theme.primary.copy(alpha = 0.2f), CircleShape)
+                        .border(1.5.dp, theme.primary.copy(alpha = 0.15f), CircleShape)
                     else -> Modifier
                 }
             ),
@@ -110,9 +110,8 @@ fun AppIcon(
                 modifier = Modifier.size(adjustedSize * 0.5f)
             )
         } else {
-            // THEMED TINT: We use the theme primary color for non-natural icons.
-            // Since the Fetcher now extracts a clean mask, this tint will look perfect.
-            val tintFilter = if (style != "natural") ColorFilter.tint(theme.primary) else null
+            // Apply a pure tint filter for themed modes
+            val colorFilter = if (style != "natural") ColorFilter.tint(theme.primary) else null
             
             AsyncImage(
                 model = request,
@@ -120,7 +119,7 @@ fun AppIcon(
                 imageLoader = context.imageLoader,
                 modifier = Modifier.size(adjustedSize * if (style == "ultraminimal") 0.85f else 0.72f),
                 contentScale = ContentScale.Fit,
-                colorFilter = tintFilter,
+                colorFilter = colorFilter,
                 onError = { isError = true }
             )
         }
